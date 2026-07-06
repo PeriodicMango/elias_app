@@ -2,10 +2,6 @@ import { getJSON, postJSON } from "./api.js";
 import { FeatureRegistry } from "./core/FeatureRegistry.js";
 import { Live2DFeature } from "./features/live2d/Live2DFeature.js";
 import { GreetingBubble } from "./features/live2d/GreetingBubble.js";
-import { ClockFeature } from "./features/clock/ClockFeature.js";
-import { WeatherFeature } from "./features/weather/WeatherFeature.js";
-import { GoalsFeature } from "./features/goals/GoalsFeature.js";
-import { ChatFeature } from "./features/chat/ChatFeature.js";
 
 const state = {
   user: null,
@@ -28,7 +24,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 async function checkAuth() {
   try {
-    const user = await getJSON("/api/auth/me");
+    const user = await getJSON("/auth/me");
     state.user = user;
     showApp();
   } catch {
@@ -137,10 +133,6 @@ function initFeatureRegistry() {
 
   // Register all features
   registry.register(new Live2DFeature({ persona: state.activePersona }));
-  registry.register(new ClockFeature());
-  registry.register(new WeatherFeature());
-  registry.register(new GoalsFeature());
-  registry.register(new ChatFeature({ persona: state.activePersona }));
 
   // Define tab order
   registry.setTabs([
@@ -220,7 +212,7 @@ async function switchTab(tabId) {
   main.innerHTML = '<div class="spinner"></div>';
   try {
     // Feature-registered tabs — delegate to FeatureRegistry
-    if (registry && registry.get(tabId)) {
+    if (registry && tabId === "live2d") {
       await registry.activate(tabId, main);
       return;
     }

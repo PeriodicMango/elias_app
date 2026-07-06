@@ -459,11 +459,13 @@ pre.log-output {
   white-space: pre-wrap; max-height: 400px; overflow-y: auto;
 }
 
+/* --- Mobile menu button (hidden on desktop) --- */
+.mobile-menu-btn { display: none; }
+
 /* ============================================================
    Mobile Responsive — max-width: 768px
    ============================================================ */
 @media (max-width: 768px) {
-  /* --- Mobile menu button --- */
   .mobile-menu-btn {
     display: flex;
     position: fixed;

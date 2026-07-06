@@ -14,6 +14,9 @@ export class Live2DFeature extends Feature {
   /** @type {number | null} */
   #rafId = null;
 
+  /** @type {ResizeObserver | null} */
+  #resizeObserver = null;
+
   /** @type {{ x: number, y: number }} */
   #mousePos = { x: 0, y: 0 };
 
@@ -44,13 +47,17 @@ export class Live2DFeature extends Feature {
     this.#canvas.id = "live2d-canvas";
     this.#canvas.style.cssText = `
       display: block;
-      width: 100%;
-      height: 100%;
       position: absolute;
       top: 0; left: 0;
     `;
 
     container.appendChild(this.#canvas);
+
+    // ResizeObserver — update canvas resolution immediately on resize
+    // (prevents CSS stretching during sidebar transition)
+    this.#resizeObserver = new ResizeObserver(() => this.#resizeCanvas());
+    this.#resizeObserver.observe(container);
+    this.#resizeCanvas();
 
     // Mouse tracking for future touch interaction
     container.addEventListener("pointermove", this.#onPointerMove);
@@ -64,6 +71,11 @@ export class Live2DFeature extends Feature {
     if (this.#rafId !== null) {
       cancelAnimationFrame(this.#rafId);
       this.#rafId = null;
+    }
+
+    if (this.#resizeObserver) {
+      this.#resizeObserver.disconnect();
+      this.#resizeObserver = null;
     }
 
     if (this.container) {
@@ -97,6 +109,22 @@ export class Live2DFeature extends Feature {
   }
 
   // -----------------------------------------------------------------------
+  // Canvas sizing
+  // -----------------------------------------------------------------------
+
+  #resizeCanvas() {
+    if (!this.#canvas || !this.container) return;
+    const w = this.container.clientWidth;
+    const h = this.container.clientHeight;
+    if (w > 0 && h > 0 && (this.#canvas.width !== w || this.#canvas.height !== h)) {
+      this.#canvas.width = w;
+      this.#canvas.height = h;
+      this.#canvas.style.width = w + "px";
+      this.#canvas.style.height = h + "px";
+    }
+  }
+
+  // -----------------------------------------------------------------------
   // Placeholder render loop
   // -----------------------------------------------------------------------
 
@@ -113,13 +141,8 @@ export class Live2DFeature extends Feature {
     const ctx = this.#canvas.getContext("2d");
     if (!ctx) return;
 
-    // Size canvas to container
-    const w = this.#canvas.parentElement?.clientWidth ?? 300;
-    const h = this.#canvas.parentElement?.clientHeight ?? 500;
-    if (this.#canvas.width !== w || this.#canvas.height !== h) {
-      this.#canvas.width = w;
-      this.#canvas.height = h;
-    }
+    const w = this.#canvas.width;
+    const h = this.#canvas.height;
 
     ctx.clearRect(0, 0, w, h);
 

@@ -1,5 +1,6 @@
 // ---------------------------------------------------------------------------
-// TouchHandler — hit-test + motion trigger
+// DEPRECATED — replaced by ModelRenderer.hitTest() + playMotion()
+// Touch handling is now delegated to the renderer backend.
 // ---------------------------------------------------------------------------
 // Placeholder. With Cubism SDK, uses CubismModelMatrix hit-test API
 // to detect which drawable area was touched, then triggers the

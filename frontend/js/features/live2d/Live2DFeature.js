@@ -1,15 +1,33 @@
 // ---------------------------------------------------------------------------
-// Live2DFeature — Live2D companion homepage
+// Live2DFeature — companion homepage with pluggable model renderer
 // ---------------------------------------------------------------------------
-// Placeholder: renders a canvas with basic idle animation.
-// Full Live2D model rendering requires Cubism SDK for Web (live2d/cubism-core/).
+// Supports three rendering backends via the ModelRenderer interface:
+//   "canvas" — CanvasPlaceholderRenderer (default, always works)
+//   "pmx"    — PMXModelRenderer (Three.js + MMDLoader, .pmx models)
+//   "live2d" — Live2DModelRenderer (Cubism SDK, .moc3 models)
 // ---------------------------------------------------------------------------
 
 import { Feature } from "../../core/Feature.js";
+import { GreetingBubble } from "./GreetingBubble.js";
+import { CanvasPlaceholderRenderer } from "./CanvasPlaceholderRenderer.js";
+import { PMXModelRenderer } from "./PMXModelRenderer.js";
+import { Live2DModelRenderer } from "./Live2DModelRenderer.js";
+
+/** @param {string} type */
+function createRenderer(type) {
+  switch (type) {
+    case "pmx":    return new PMXModelRenderer();
+    case "live2d": return new Live2DModelRenderer();
+    default:       return new CanvasPlaceholderRenderer();
+  }
+}
 
 export class Live2DFeature extends Feature {
-  /** @type {HTMLCanvasElement | null} */
-  #canvas = null;
+  /** @type {import("./ModelRenderer.js").ModelRenderer | null} */
+  #renderer = null;
+
+  /** @type {GreetingBubble | null} */
+  #bubble = null;
 
   /** @type {number | null} */
   #rafId = null;
@@ -17,14 +35,16 @@ export class Live2DFeature extends Feature {
   /** @type {ResizeObserver | null} */
   #resizeObserver = null;
 
-  /** @type {{ x: number, y: number }} */
-  #mousePos = { x: 0, y: 0 };
+  /** @type {number} */
+  #lastFrameTime = 0;
 
   constructor(config = {}) {
     super("live2d", "companion", {
-      icon: "👧", // 👧
+      icon: "\u{1F9B8}",
       label: "Companion",
       persona: "elias",
+      rendererType: "canvas", // "canvas" | "pmx" | "live2d"
+      modelPath: "",
       ...config,
     });
   }
@@ -40,32 +60,31 @@ export class Live2DFeature extends Feature {
 
   async mount(container) {
     this.container = container;
-
-    // Clear container and set as positioning anchor
     container.innerHTML = "";
     container.style.position = "relative";
     container.style.overflow = "hidden";
-    this.#canvas = document.createElement("canvas");
-    this.#canvas.id = "live2d-canvas";
-    this.#canvas.style.cssText = `
-      display: block;
-      position: absolute;
-      top: 0; left: 0;
-    `;
 
-    container.appendChild(this.#canvas);
+    // Model renderer
+    const type = this.config.rendererType ?? "canvas";
+    const modelPath = this.config.modelPath || `models/${this.persona}/`;
+    this.#renderer = createRenderer(type);
+    await this.#renderer.load(container, modelPath);
 
-    // ResizeObserver — update canvas resolution immediately on resize
-    // (prevents CSS stretching during sidebar transition)
+    // Greeting bubble overlay
+    this.#bubble = new GreetingBubble(this.persona);
+    this.#bubble.mount(container);
+    this.#bubble.refresh().then(() => this.#bubble.show());
+
+    // ResizeObserver
     this.#resizeObserver = new ResizeObserver(() => this.#resizeCanvas());
     this.#resizeObserver.observe(container);
     this.#resizeCanvas();
 
-    // Mouse tracking for future touch interaction
-    container.addEventListener("pointermove", this.#onPointerMove);
+    // Tap handler
     container.addEventListener("pointerdown", this.#onPointerDown);
 
-    // Start placeholder render loop
+    // Render loop
+    this.#lastFrameTime = performance.now();
     this.#startRenderLoop();
   }
 
@@ -80,27 +99,31 @@ export class Live2DFeature extends Feature {
       this.#resizeObserver = null;
     }
 
+    if (this.#bubble) {
+      this.#bubble.unmount();
+      this.#bubble = null;
+    }
+
     if (this.container) {
-      this.container.removeEventListener("pointermove", this.#onPointerMove);
       this.container.removeEventListener("pointerdown", this.#onPointerDown);
     }
 
-    if (this.#canvas && this.#canvas.parentNode) {
-      this.#canvas.parentNode.removeChild(this.#canvas);
+    if (this.#renderer) {
+      this.#renderer.dispose();
+      this.#renderer = null;
     }
-    this.#canvas = null;
     this.container = null;
   }
 
   getWidgetData() {
-    return {
-      persona: this.persona,
-      type: "live2d",
-    };
+    return { persona: this.persona, type: "live2d" };
   }
 
   onResume() {
-    if (!this.#rafId) this.#startRenderLoop();
+    if (!this.#rafId) {
+      this.#lastFrameTime = performance.now();
+      this.#startRenderLoop();
+    }
   }
 
   onPause() {
@@ -111,111 +134,52 @@ export class Live2DFeature extends Feature {
   }
 
   // -----------------------------------------------------------------------
-  // Canvas sizing
+  // Rendering
   // -----------------------------------------------------------------------
 
   #resizeCanvas() {
-    if (!this.#canvas || !this.container) return;
-    const w = this.container.clientWidth;
-    const h = this.container.clientHeight;
-    if (w > 0 && h > 0 && (this.#canvas.width !== w || this.#canvas.height !== h)) {
-      this.#canvas.width = w;
-      this.#canvas.height = h;
-      this.#canvas.style.width = w + "px";
-      this.#canvas.style.height = h + "px";
-    }
+    if (!this.#renderer || !this.container) return;
+    this.#renderer.resize(this.container.clientWidth, this.container.clientHeight);
   }
 
-  // -----------------------------------------------------------------------
-  // Placeholder render loop
-  // -----------------------------------------------------------------------
-
   #startRenderLoop() {
-    const draw = () => {
+    const draw = (now) => {
       this.#rafId = requestAnimationFrame(draw);
-      this.#drawPlaceholder();
+      const dt = (now - this.#lastFrameTime) / 1000;
+      this.#lastFrameTime = now;
+      if (this.#renderer) this.#renderer.update(dt);
     };
     this.#rafId = requestAnimationFrame(draw);
   }
 
-  #drawPlaceholder() {
-    if (!this.#canvas) return;
-    const ctx = this.#canvas.getContext("2d");
-    if (!ctx) return;
-
-    const w = this.#canvas.width;
-    const h = this.#canvas.height;
-
-    ctx.clearRect(0, 0, w, h);
-
-    // Draw a simple placeholder figure (circle head + trapezoid body)
-    const cx = w / 2;
-    const cy = h * 0.35;
-    const headR = Math.min(w, h) * 0.15;
-
-    // Body
-    ctx.fillStyle = "rgba(91,154,255,0.15)";
-    ctx.beginPath();
-    ctx.moveTo(cx - headR * 0.8, cy + headR + 40);
-    ctx.lineTo(cx + headR * 0.8, cy + headR + 40);
-    ctx.lineTo(cx + headR * 1.2, cy + headR + 120);
-    ctx.lineTo(cx - headR * 1.2, cy + headR + 120);
-    ctx.closePath();
-    ctx.fill();
-
-    // Head
-    ctx.fillStyle = "rgba(91,154,255,0.20)";
-    ctx.beginPath();
-    ctx.arc(cx, cy, headR, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Eyes (follow mouse)
-    const dx = Math.max(-4, Math.min(4, (this.#mousePos.x - cx) * 0.02));
-    const dy = Math.max(-3, Math.min(3, (this.#mousePos.y - cy) * 0.02));
-    ctx.fillStyle = "rgba(45,48,72,0.5)";
-    ctx.beginPath();
-    ctx.arc(cx - headR * 0.35 + dx, cy - headR * 0.1 + dy, 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(cx + headR * 0.35 + dx, cy - headR * 0.1 + dy, 4, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Mouth (subtle smile)
-    ctx.strokeStyle = "rgba(45,48,72,0.3)";
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(cx, cy + headR * 0.3, headR * 0.2, 0.1 * Math.PI, 0.9 * Math.PI);
-    ctx.stroke();
-
-    // Label
-    ctx.fillStyle = "var(--text-tertiary)";
-    ctx.font = "14px var(--font)";
-    ctx.textAlign = "center";
-    ctx.fillText("Live2D placeholder — Cubism SDK pending", cx, h * 0.75);
-  }
-
   // -----------------------------------------------------------------------
-  // Input handlers
+  // Interaction
   // -----------------------------------------------------------------------
 
-  #onPointerMove = (e) => {
-    if (!this.container) return;
+  #onPointerDown = (e) => {
+    if (!this.#renderer || !this.container) return;
+    // Refresh greeting on tap
+    if (this.#bubble) this.#bubble.refresh().then(() => this.#bubble.show());
+    // Hit test against model
     const rect = this.container.getBoundingClientRect();
-    this.#mousePos = {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    };
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const hit = this.#renderer.hitTest(x, y);
+    if (hit) this.#renderer.playMotion(hit);
   };
 
-  #onPointerDown = (_e) => {
-    // Placeholder: tap triggers a greeting bubble refresh
-    // TODO: Cubism hit-test → motion trigger
-    const event = new CustomEvent("elias-live2d-tap", {
-      bubbles: true,
-      detail: { persona: this.persona },
-    });
-    this.container?.dispatchEvent(event);
-  };
+  // -----------------------------------------------------------------------
+  // Speech bubble style customization (placeholder)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Set the greeting bubble style.
+   * @param {{ position?: "top" | "bottom", animation?: "fade" | "slide" }} style
+   */
+  setBubbleStyle(style) {
+    if (!this.#bubble) return;
+    console.log("[Live2D] bubble style:", style);
+  }
 }
 
 export default Live2DFeature;

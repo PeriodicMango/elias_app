@@ -1,8 +1,7 @@
 // ---------------------------------------------------------------------------
-// Live2DModel — interface for Cubism model loading/rendering
+// DEPRECATED — replaced by ModelRenderer + Live2DModelRenderer
+// Use Live2DFeature with rendererType: "live2d" instead.
 // ---------------------------------------------------------------------------
-// Placeholder. When Cubism SDK is installed, this wraps the actual
-// LAppModel loading and frame update loop.
 // ---------------------------------------------------------------------------
 
 /**

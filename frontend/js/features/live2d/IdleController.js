@@ -1,5 +1,6 @@
 // ---------------------------------------------------------------------------
-// IdleController — natural breathing, blinking, random idle motions
+// DEPRECATED — replaced by ModelRenderer.update()
+// Idle animation is now handled by the renderer backend.
 // ---------------------------------------------------------------------------
 // Placeholder. With Cubism SDK, drives parameter updates for
 // ParamBreath, ParamEyeLOpen/ROpen, and triggers random idle motions

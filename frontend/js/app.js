@@ -2,7 +2,6 @@ import { getJSON, postJSON } from "./api.js";
 import { FeatureRegistry } from "./core/FeatureRegistry.js";
 import { widgetBridge } from "./core/WidgetBridge.js";
 import { Live2DFeature } from "./features/live2d/Live2DFeature.js";
-import { GreetingBubble } from "./features/live2d/GreetingBubble.js";
 
 const state = {
   user: null,
@@ -14,9 +13,6 @@ const state = {
 
 /** @type {import("./core/FeatureRegistry.js").FeatureRegistry} */
 let registry = null;
-
-/** @type {GreetingBubble | null} */
-let greetingBubble = null;
 
 /** @type {number | null} */
 let timeTickInterval = null;

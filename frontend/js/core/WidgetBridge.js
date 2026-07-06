@@ -1,44 +1,48 @@
 // ---------------------------------------------------------------------------
-// WidgetBridge — interface for native widget data exchange
+// WidgetBridge — native widget data bridge (Android Glance / iOS WidgetKit)
 // ---------------------------------------------------------------------------
-// Placeholder. In the Capacitor build, this will be backed by a Capacitor
-// plugin that writes to Android SharedPreferences (or a ContentProvider)
-// so the Glance widget can read persona name + latest greeting.
+// Sends feature data to the native home screen widget.
+// In the Capacitor build, this writes to SharedPreferences that the native
+// widget reads on refresh.
 //
 // For web (non-Capacitor), this is a no-op stub.
+//
+// Data flow: Features → FeatureRegistry.collectWidgetData() → WidgetBridge
 // ---------------------------------------------------------------------------
 
 /**
- * Interface for native widget data bridge.
+ * Bridge to native home screen widget.
  *
- * In the Capacitor build, replace this with a plugin-backed implementation
+ * In the Capacitor build, replace with a plugin-backed implementation
  * that writes widget data to the native layer.
- *
- * @interface
  */
 export class WidgetBridge {
   /**
-   * Update the data visible to the native widget.
-   * @param {object} data - key-value pairs (persona, greeting, unread, ...)
+   * Sync feature data to the native widget.
+   * Called periodically from the app time tick loop.
+   * @param {import("./FeatureRegistry.js").FeatureRegistry} registry
    * @returns {Promise<void>}
    */
-  async update(data) {
-    // Placeholder: log to console in dev, no-op in prod.
+  async syncFromFeatures(registry) {
+    const data = registry.collectWidgetData();
+    if (Object.keys(data).length === 0) return;
+    await this.#update(data);
+  }
+
+  // -----------------------------------------------------------------------
+  // Private
+  // -----------------------------------------------------------------------
+
+  /**
+   * Write data to the native widget layer.
+   * @param {object} data — keyed by feature id
+   */
+  async #update(data) {
     if (typeof window !== "undefined" && window.location.hostname === "localhost") {
-      console.log("[WidgetBridge] update:", data);
+      console.log("[WidgetBridge] sync:", data);
     }
     // TODO: Capacitor plugin — write to SharedPreferences
     // Capacitor.Plugins.EliasWidget.updateWidget(data);
-  }
-
-  /**
-   * Schedule the widget refresh interval.
-   * @param {number} intervalMinutes
-   * @returns {Promise<void>}
-   */
-  async scheduleRefresh(_intervalMinutes) {
-    // Placeholder
-    // TODO: Capacitor plugin — schedule WorkManager periodic task
   }
 }
 

@@ -1,5 +1,6 @@
 import { getJSON, postJSON } from "./api.js";
 import { FeatureRegistry } from "./core/FeatureRegistry.js";
+import { widgetBridge } from "./core/WidgetBridge.js";
 import { Live2DFeature } from "./features/live2d/Live2DFeature.js";
 import { GreetingBubble } from "./features/live2d/GreetingBubble.js";
 
@@ -157,14 +158,20 @@ function initFeatureRegistry() {
   } catch { /* not in Capacitor */ }
 }
 
-/** Periodic time tick for time-aware features. */
+/** Periodic time tick for time-aware features + native widget sync. */
 function startTimeTick() {
   if (timeTickInterval) clearInterval(timeTickInterval);
   timeTickInterval = setInterval(() => {
-    if (registry) registry.tick(new Date());
+    if (registry) {
+      registry.tick(new Date());
+      widgetBridge.syncFromFeatures(registry).catch(() => {});
+    }
   }, 60_000); // every minute
   // Fire once immediately
-  if (registry) registry.tick(new Date());
+  if (registry) {
+    registry.tick(new Date());
+    widgetBridge.syncFromFeatures(registry).catch(() => {});
+  }
 }
 
 function renderSidebar() {
@@ -380,7 +387,7 @@ async function renderHomeTab() {
   // Listen for chatbox submit → switch to chat tab
   window.addEventListener("elias-home-chat", () => {
     switchTab("chat");
-  });
+  }, { once: true });
 }
 
 // --- Personas Tab ---

@@ -11,12 +11,16 @@ const WIDGET_TYPES = {
 };
 
 // ---------------------------------------------------------------------------
-// WidgetManager — manages widget state in localStorage
+// HomepageWidgets — manages homepage card grid state in localStorage
+//
+// Note: this is for the web homepage "小组件" card grid (clock, weather, etc.).
+// Not to be confused with WidgetBridge (core/WidgetBridge.js) which bridges
+// data to the Android native home screen widget.
 // ---------------------------------------------------------------------------
 
 const STORAGE_KEY = 'elias-widgets';
 
-class WidgetManager {
+class HomepageWidgets {
   constructor() {
     this.widgets = this._load();
   }
@@ -50,7 +54,7 @@ class WidgetManager {
   }
 }
 
-let widgetManager;
+let homepageWidgets;
 
 // ---------------------------------------------------------------------------
 // Greeting
@@ -105,7 +109,7 @@ function initChatbox() {
 
 function renderWidgets() {
   const grid = document.getElementById('widget-grid');
-  const widgets = widgetManager.list();
+  const widgets = homepageWidgets.list();
   grid.innerHTML = '';
 
   if (widgets.length === 0) {
@@ -128,7 +132,7 @@ function renderWidgets() {
       </div>
     `;
     card.querySelector('.widget-card-remove').addEventListener('click', () => {
-      widgetManager.remove(w.id);
+      homepageWidgets.remove(w.id);
       renderWidgets();
     });
     grid.appendChild(card);
@@ -158,7 +162,7 @@ function initWidgetAddBtn() {
     item.innerHTML = `<span class="widget-type-icon">${def.icon}</span> ${def.title}`;
     item.addEventListener('click', (e) => {
       e.stopPropagation();
-      widgetManager.add(type, def.title);
+      homepageWidgets.add(type, def.title);
       renderWidgets();
       menu.classList.remove('show');
     });
@@ -171,7 +175,7 @@ function initWidgetAddBtn() {
 // ---------------------------------------------------------------------------
 
 export async function renderHome(persona) {
-  widgetManager = new WidgetManager();
+  homepageWidgets = new WidgetManager();
 
   const main = document.getElementById('main-content');
   main.innerHTML = `

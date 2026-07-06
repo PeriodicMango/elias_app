@@ -38,7 +38,8 @@ export class Live2DFeature extends Feature {
   async mount(container) {
     this.container = container;
 
-    // Create canvas
+    // Clear container and create canvas
+    container.innerHTML = "";
     this.#canvas = document.createElement("canvas");
     this.#canvas.id = "live2d-canvas";
     this.#canvas.style.cssText = `

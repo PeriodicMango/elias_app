@@ -41,8 +41,10 @@ export class Live2DFeature extends Feature {
   async mount(container) {
     this.container = container;
 
-    // Clear container and create canvas
+    // Clear container and set as positioning anchor
     container.innerHTML = "";
+    container.style.position = "relative";
+    container.style.overflow = "hidden";
     this.#canvas = document.createElement("canvas");
     this.#canvas.id = "live2d-canvas";
     this.#canvas.style.cssText = `

@@ -157,14 +157,18 @@ export class PMXModelRenderer extends ModelRenderer {
       this.#scene.add(this.#mesh);
 
       // Physics — Ammo.js cloth/hair/skirt simulation
+      console.log("[PMX] Ammo available:", typeof Ammo !== "undefined");
       if (typeof Ammo !== "undefined") {
         try {
+          console.log("[PMX] Initializing Ammo...");
           const AmmoLib = await Ammo();
           self.Ammo = AmmoLib;
+          console.log("[PMX] Ammo ready, setting up physics helper...");
           this.#helper = new MMDAnimationHelper({ afterglow: 2.0 });
           this.#helper.add(this.#mesh, { animation: null, physics: true });
+          console.log("[PMX] Physics helper initialized successfully");
         } catch (e) {
-          console.warn("[PMX] Physics init failed (non-fatal):", e.message);
+          console.warn("[PMX] Physics init failed:", e.message || e, e.stack);
         }
       }
 

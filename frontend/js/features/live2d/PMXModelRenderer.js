@@ -47,6 +47,12 @@ export class PMXModelRenderer extends ModelRenderer {
   /** @type {import("three").Bone | null} */
   #bodyBone = null;
 
+  /** @type {import("three").Bone | null} */
+  #lShoulder = null;
+
+  /** @type {import("three").Bone | null} */
+  #rShoulder = null;
+
   /** @type {number} */
   #blinkMorphIdx = -1;
 
@@ -323,6 +329,10 @@ export class PMXModelRenderer extends ModelRenderer {
         const b = skeleton.getBoneByName(name);
         if (b) { this.#bodyBone = b; break; }
       }
+      const lShoulder = skeleton.getBoneByName("左肩");
+      const rShoulder = skeleton.getBoneByName("右肩");
+      if (lShoulder) this.#lShoulder = lShoulder;
+      if (rShoulder) this.#rShoulder = rShoulder;
     }
     if (morphDict) {
       for (const name of BLINK_MORPH_NAMES) {
@@ -341,15 +351,20 @@ export class PMXModelRenderer extends ModelRenderer {
     headX: 0.04, headZ: 0.02,
   };
 
-  /** Set initial relaxed idle pose — subtle head tilt only. */
+  /** Set initial relaxed idle pose. Uses incremental rotation for arms. */
   #setIdlePose() {
     if (this.#headBone) {
       this.#headBone.rotation.set(this.#basePose.headX, 0, this.#basePose.headZ);
     }
+    // Rotate shoulders to bring arms down from A-pose (rotate around Z axis)
+    if (this.#lShoulder) this.#lShoulder.rotateZ(-0.35);
+    if (this.#rShoulder) this.#rShoulder.rotateZ(0.35);
   }
 
   #applyIdle(dt) {
     if (!this.#mesh) return;
+
+    this.#idleTime += dt;
 
     // Gentle whole-body sway
     this.#mesh.rotation.y = Math.sin(this.#idleTime * 0.35) * 0.03;

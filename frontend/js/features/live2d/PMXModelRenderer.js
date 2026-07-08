@@ -11,6 +11,7 @@
 import { ModelRenderer } from "./ModelRenderer.js";
 import * as T from "three";
 import { MMDLoader } from "three/addons/loaders/MMDLoader.js";
+import { MMDAnimationHelper } from "three/addons/animation/MMDAnimationHelper.js";
 
 // ---------------------------------------------------------------------------
 // Bone & morph names to probe (Japanese / Chinese / English)
@@ -61,6 +62,9 @@ export class PMXModelRenderer extends ModelRenderer {
 
   /** @type {import("three").Bone[]} */
   #hairBones = [];
+
+  /** @type {any | null} */
+  #helper = null;
 
   /** @type {number} */
   #blinkMorphIdx = -1;
@@ -152,7 +156,18 @@ export class PMXModelRenderer extends ModelRenderer {
 
       this.#scene.add(this.#mesh);
 
-      // Add portrait frame around the canvas
+      // Physics — Ammo.js cloth/hair/skirt simulation
+      if (typeof Ammo !== "undefined") {
+        try {
+          const AmmoLib = await Ammo();
+          self.Ammo = AmmoLib;
+          this.#helper = new MMDAnimationHelper({ afterglow: 2.0 });
+          this.#helper.add(this.#mesh, { animation: null, physics: true });
+        } catch (e) {
+          console.warn("[PMX] Physics init failed (non-fatal):", e.message);
+        }
+      }
+
       try {
         this.#probeRig(this.#mesh.skeleton, this.#mesh.morphTargetDictionary);
       } catch (e) { throw step("Skeleton probe")(e); }
@@ -191,6 +206,9 @@ export class PMXModelRenderer extends ModelRenderer {
     if (!this.loaded || !this.#renderer || !this.#scene || !this.#camera || !this.#clock) return;
 
     const dt = Math.min(this.#clock.getDelta(), 0.1);
+
+    // MMD physics (cloth, hair, skirt via Ammo.js)
+    if (this.#helper) this.#helper.update(dt);
 
     // Code-driven idle animations
     if (this.#mesh) this.#applyIdle(dt);
@@ -264,6 +282,10 @@ export class PMXModelRenderer extends ModelRenderer {
   // -----------------------------------------------------------------------
 
   dispose() {
+    if (this.#helper && this.#mesh) {
+      this.#helper.remove(this.#mesh);
+      this.#helper = null;
+    }
     if (this.#mesh) {
       this.#mesh.traverse((child) => {
         if (child.geometry) child.geometry.dispose();

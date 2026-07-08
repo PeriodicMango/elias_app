@@ -2,6 +2,8 @@
 // Elias Web Console — Homepage (greeting only)
 // ---------------------------------------------------------------------------
 
+import { escapeHtml } from "./core/dom.js";
+
 // ---------------------------------------------------------------------------
 // Greeting
 // ---------------------------------------------------------------------------
@@ -46,8 +48,3 @@ export async function renderHome(persona) {
   await loadGreeting(persona);
 }
 
-function escapeHtml(s) {
-  const div = document.createElement('div');
-  div.textContent = s;
-  return div.innerHTML;
-}

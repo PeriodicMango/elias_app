@@ -147,6 +147,21 @@ export class FeatureRegistry {
   }
 
   /**
+   * Deactivate the currently active feature, if any.
+   * Cleans up resources before the DOM is cleared.
+   * @returns {Promise<void>}
+   */
+  async deactivate() {
+    if (!this.#activeFeature) return;
+    try {
+      await this.#activeFeature.unmount();
+    } catch (e) {
+      console.error(`FeatureRegistry: unmount "${this.#activeFeature.id}" failed:`, e);
+    }
+    this.#activeFeature = null;
+  }
+
+  /**
    * Broadcast lifecycle event to all registered features.
    * @param {"onResume" | "onPause"} event
    */

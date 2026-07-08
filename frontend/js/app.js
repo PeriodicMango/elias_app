@@ -2,6 +2,7 @@ import { getJSON, postJSON } from "./api.js";
 import { FeatureRegistry } from "./core/FeatureRegistry.js";
 import { widgetBridge } from "./core/WidgetBridge.js";
 import { Live2DFeature } from "./features/live2d/Live2DFeature.js";
+import { escapeHtml } from "./core/dom.js";
 
 const state = {
   user: null,
@@ -167,8 +168,6 @@ function initFeatureRegistry() {
     { id: "chat",    icon: "\u{1F4AC}", label: "Chat" },
     { id: "models",  icon: "\u{1F3AE}", label: "Models" },
     { id: "goals",   icon: "\u{1F4CB}", label: "Goals" },
-    { id: "clock",   icon: "\u{1F550}", label: "Clock" },
-    { id: "weather", icon: "\u{1F324}️", label: "Weather" },
     { id: "personas", icon: "\u{1F465}", label: "Personas" },
     { id: "kb",      icon: "\u{1F9E0}", label: "KB" },
     { id: "settings", icon: "⚙️", label: "Settings" },
@@ -242,6 +241,9 @@ async function switchTab(tabId) {
       sidebar.classList.add("collapsed");
     }
   }
+  // Deactivate any active feature before clearing its DOM
+  if (registry) await registry.deactivate();
+
   const main = document.getElementById("main-content");
   main.innerHTML = '<div class="spinner"></div>';
   try {
@@ -282,7 +284,7 @@ async function switchTab(tabId) {
   }
   document.querySelectorAll(".nav-item").forEach((el) => {
     const text = el.textContent?.trim().toLowerCase() ?? "";
-    const navIds = { home: ["home"], chat: ["chat"], personas: ["personas"], kb: ["knowledgebase"], goals: ["goals"], settings: ["settings"], style: ["style"] };
+    const navIds = { home: ["home"], chat: ["chat"], personas: ["personas"], kb: ["knowledgebase"], goals: ["goals"], models: ["models"], settings: ["settings"], style: ["style"], live2d: ["companion"], weather: ["weather"] };
     const matches = navIds[tabId] || [tabId];
     el.classList.toggle("active", matches.some(m => text.includes(m)));
   });
@@ -345,9 +347,18 @@ async function renderChat() {
       let msgHTML = escapeHtml(data.reply);
       if (data.thinking && data.thinking.trim()) {
         const thinkingId = "thinking-" + Date.now();
-        msgHTML += '<div class="thinking-toggle" onclick="var t=document.getElementById(\'' + thinkingId + '\');t.classList.toggle(\'hidden\');this.classList.toggle(\'open\');"><span class="thinking-arrow">\u25B6</span> Thinking</div><pre class="thinking-content hidden" id="' + thinkingId + '">' + escapeHtml(data.thinking.trim()) + "</pre>";
+        msgHTML += '<div class="thinking-toggle" data-thinking-id="' + thinkingId + '"><span class="thinking-arrow">\u25B6</span> Thinking</div><pre class="thinking-content hidden" id="' + thinkingId + '">' + escapeHtml(data.thinking.trim()) + "</pre>";
       }
       loadingEl.querySelector(".msg-content").innerHTML = msgHTML;
+      // Attach thinking toggle listener (avoids inline onclick / CSP issues)
+      const toggleEl = loadingEl.querySelector(".thinking-toggle");
+      if (toggleEl) {
+        toggleEl.addEventListener("click", () => {
+          const content = document.getElementById(toggleEl.dataset.thinkingId);
+          if (content) content.classList.toggle("hidden");
+          toggleEl.classList.toggle("open");
+        });
+      }
       if (data.mood && data.mood !== "\u5E73\u9759") {
         const meta = loadingEl.querySelector(".msg-meta");
         meta.innerHTML += ` <span class="msg-mood">${escapeHtml(data.mood)}</span>`;
@@ -506,21 +517,14 @@ async function renderPersonasTab() {
       const avatarUrl = card.querySelector("[data-field='avatarUrl']").value;
 
       // For masterTitle and displayName, update the YAML in fileContent
-      let updatedContent = fileContent;
       const masterTitle = card.querySelector("[data-field='masterTitle']").value;
       const displayName = card.querySelector("[data-field='displayName']").value;
 
-      // Update master_title in YAML frontmatter
-      updatedContent = updatedContent.replace(/master_title:\s*.*/g, `master_title: ${masterTitle}`);
-      if (!updatedContent.includes("master_title:")) {
-        updatedContent = updatedContent.replace(/---\n/, `---\nmaster_title: ${masterTitle}\n`);
-      }
-
-      // Update display_name in YAML frontmatter
-      updatedContent = updatedContent.replace(/display_name:\s*.*/g, `display_name: ${displayName}`);
-      if (!updatedContent.includes("display_name:")) {
-        updatedContent = updatedContent.replace(/---\n/, `---\ndisplay_name: ${displayName}\n`);
-      }
+      // Update YAML frontmatter safely
+      let updatedContent = updateFrontmatter(fileContent, {
+        master_title: masterTitle,
+        display_name: displayName,
+      });
 
       const avatarValue = card.querySelector("[data-field='avatarUrl']").value;
       const isBase64 = avatarValue.startsWith("data:image");
@@ -1222,11 +1226,38 @@ function applyCardStyle(style) {
   document.querySelectorAll(".card").forEach((c) => c.classList.toggle("card-elevated", elevated));
   localStorage.setItem("elias-card-style", style);
 }
-function escapeHtml(s) {
-  const div = document.createElement("div");
-  div.textContent = s;
-  return div.innerHTML;
+/**
+ * Update key-value pairs in a Markdown file's YAML frontmatter.
+ * Creates a frontmatter block if none exists.
+ * @param {string} content — raw file content
+ * @param {Record<string, string>} updates — key: value pairs to set
+ * @returns {string}
+ */
+function updateFrontmatter(content, updates) {
+  const match = content.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  if (!match) {
+    // No frontmatter — create one
+    const yaml = Object.entries(updates)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join("\n");
+    return `---\n${yaml}\n---\n\n${content}`;
+  }
+
+  let frontmatter = match[1];
+  const body = match[2];
+
+  for (const [key, value] of Object.entries(updates)) {
+    const regex = new RegExp(`^${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:\\s*.*$`, "m");
+    if (regex.test(frontmatter)) {
+      frontmatter = frontmatter.replace(regex, `${key}: ${value}`);
+    } else {
+      frontmatter += `\n${key}: ${value}`;
+    }
+  }
+
+  return `---\n${frontmatter}\n---\n\n${body}`;
 }
+
 function formatUptime(seconds) {
   const d = Math.floor(seconds / 86400);
   const h = Math.floor(seconds % 86400 / 3600);

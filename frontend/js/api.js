@@ -49,75 +49,47 @@ function handleAuthError() {
 // HTTP wrappers
 // -----------------------------------------------------------------------
 
-async function getJSON(path) {
-  const res = await fetch(BASE + path, {
+/**
+ * Core request function. All verb helpers delegate to this.
+ * @param {string} method
+ * @param {string} path
+ * @param {object} [body]
+ * @returns {Promise<any>}
+ */
+async function request(method, path, body) {
+  const options = {
+    method,
     headers: authHeaders(),
     credentials: "include",
-  });
+  };
+  if (body !== undefined) options.body = JSON.stringify(body);
+
+  const res = await fetch(BASE + path, options);
   if (res.status === 401) {
-    // If we used a token that's now invalid, fall through to handleAuthError
     handleAuthError();
     throw new Error("Unauthorized");
   }
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `HTTP ${res.status}`);
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `HTTP ${res.status}`);
   }
   return res.json();
+}
+
+async function getJSON(path) {
+  return request("GET", path);
 }
 
 async function postJSON(path, body) {
-  const res = await fetch(BASE + path, {
-    method: "POST",
-    headers: authHeaders(),
-    credentials: "include",
-    body: body ? JSON.stringify(body) : void 0,
-  });
-  if (res.status === 401) {
-    handleAuthError();
-    throw new Error("Unauthorized");
-  }
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `HTTP ${res.status}`);
-  }
-  return res.json();
+  return request("POST", path, body);
 }
 
 async function putJSON(path, body) {
-  const res = await fetch(BASE + path, {
-    method: "PUT",
-    headers: authHeaders(),
-    credentials: "include",
-    body: body ? JSON.stringify(body) : void 0,
-  });
-  if (res.status === 401) {
-    handleAuthError();
-    throw new Error("Unauthorized");
-  }
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `HTTP ${res.status}`);
-  }
-  return res.json();
+  return request("PUT", path, body);
 }
 
 async function deleteJSON(path, body) {
-  const res = await fetch(BASE + path, {
-    method: "DELETE",
-    headers: authHeaders(),
-    credentials: "include",
-    body: body ? JSON.stringify(body) : void 0,
-  });
-  if (res.status === 401) {
-    handleAuthError();
-    throw new Error("Unauthorized");
-  }
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `HTTP ${res.status}`);
-  }
-  return res.json();
+  return request("DELETE", path, body);
 }
 
 export { deleteJSON, getJSON, postJSON, putJSON };

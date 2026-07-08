@@ -174,8 +174,8 @@ export class PMXModelRenderer extends ModelRenderer {
       this.#hideOverlay();
       this.loaded = true;
     } catch (err) {
-      console.error("[PMX] Failed to load model:", err);
-      this.#showOverlay("Failed to load model");
+      console.error("[PMX] Failed to load model:", err, "| URL:", modelPath);
+      this.#showOverlay(`Failed to load model: ${err.message || err}`);
       this.loaded = true;
     }
 

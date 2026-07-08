@@ -628,7 +628,7 @@ pre.log-output {
   align-items: center;
   gap: var(--space-md);
   padding: var(--space-sm) 0;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border);
 }
 
 .model-row:last-child {

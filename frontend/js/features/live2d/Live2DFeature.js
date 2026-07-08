@@ -66,7 +66,11 @@ export class Live2DFeature extends Feature {
 
     // Model renderer
     const type = this.config.rendererType ?? "canvas";
-    const modelPath = this.config.modelPath || `models/${this.persona}/`;
+    const rawPath = this.config.modelPath || `models/${this.persona}/`;
+    // Normalize: ensure path is relative to frontend root with models/ prefix
+    const modelPath = rawPath.startsWith("/") || rawPath.startsWith("models/")
+      ? rawPath
+      : `models/${rawPath}`;
     this.#renderer = createRenderer(type);
     await this.#renderer.load(container, modelPath);
 

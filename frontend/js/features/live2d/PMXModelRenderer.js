@@ -371,12 +371,12 @@ export class PMXModelRenderer extends ModelRenderer {
     }
     // Rotate upper arms (腕) down from A-pose to natural hanging position
     if (this.#lUpperArm) {
-      this.#lUpperArm.rotateZ(-0.55);
-      this.#lUpperArm.rotateX(0.1);
+      this.#lUpperArm.rotateZ(-0.65);
+      this.#lUpperArm.rotateX(0.08);
     }
     if (this.#rUpperArm) {
-      this.#rUpperArm.rotateZ(0.55);
-      this.#rUpperArm.rotateX(0.1);
+      this.#rUpperArm.rotateZ(0.65);
+      this.#rUpperArm.rotateX(0.08);
     }
   }
 
@@ -406,7 +406,7 @@ export class PMXModelRenderer extends ModelRenderer {
     // Hair — subtle side-to-side sway only (no forward/back to avoid clipping)
     for (let i = 0; i < this.#hairBones.length; i++) {
       const phase = i * 0.7;
-      this.#hairBones[i].rotateZ(Math.sin(this.#idleTime * 0.8 + phase) * 0.004);
+      this.#hairBones[i].rotateZ(Math.sin(this.#idleTime * 0.8 + phase) * 0.002);
     }
 
     // Blink morph

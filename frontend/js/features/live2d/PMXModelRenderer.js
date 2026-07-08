@@ -164,7 +164,7 @@ export class PMXModelRenderer extends ModelRenderer {
           const AmmoLib = typeof Ammo === "function" ? await Ammo() : Ammo;
           self.Ammo = AmmoLib;
           this.#helper = new MMDAnimationHelper({ afterglow: 2.0 });
-          this.#helper.add(this.#mesh, { animation: null, physics: true });
+          this.#helper.add(this.#mesh, { animation: false, physics: true });
         } catch (e) {
           console.warn("[PMX] Physics init failed:", e.message || e);
         }

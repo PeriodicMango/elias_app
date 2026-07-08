@@ -66,6 +66,9 @@ export class PMXModelRenderer extends ModelRenderer {
   /** @type {number} */
   #blinkMorphIdx = -1;
 
+  /** @type {number} — base Y position (set after fitCamera + offset) */
+  #baseY = 0;
+
   // Idle state ---------------------------------------------------------------
   #idleTime   = 0;
   #blinkTimer = 0;
@@ -160,8 +163,9 @@ export class PMXModelRenderer extends ModelRenderer {
         this.#fitCamera();
       } catch (e) { throw step("Camera fit")(e); }
 
-      // Move model higher in frame
+      // Move model higher in frame and record base Y
       this.#mesh.position.y += 1.5;
+      this.#baseY = this.#mesh.position.y;
 
       // Set initial idle pose (arms relaxed, slight head tilt)
       this.#setIdlePose();
@@ -372,43 +376,48 @@ export class PMXModelRenderer extends ModelRenderer {
 
   // -- idle pose & animation -------------------------------------------------
 
-  /** Set initial relaxed idle pose — head tilted, arms at sides, elbows bent. */
+  // Base pose rotations (set once, idle anim oscillates around these)
+  #basePose = {
+    headX: 0.06, headZ: 0.03,
+    lArmZ: -0.5, rArmZ: 0.5,
+    lElbowX: -0.6, rElbowX: -0.6,
+  };
+
+  /** Set initial relaxed idle pose — arms down from A-pose, head tilted. */
   #setIdlePose() {
-    // Reset then set — override default A-pose bone rotations
-    const setBone = (bone, x, y, z) => {
+    const setBone = (bone, rot) => {
       if (!bone) return;
       bone.quaternion.identity();
-      bone.rotation.set(x ?? 0, y ?? 0, z ?? 0);
+      bone.rotation.set(rot.x ?? 0, rot.y ?? 0, rot.z ?? 0);
     };
-    setBone(this.#headBone, 0.04, 0, 0.025);
-    setBone(this.#lArmBone, 0.3, 0, 0.15);
-    setBone(this.#rArmBone, 0.3, 0, -0.15);
-    setBone(this.#lElbowBone, 0.4, 0, 0.08);
-    setBone(this.#rElbowBone, 0.4, 0, -0.08);
-    console.log("[PMX] Idle pose applied — head:", this.#headBone?.rotation.x.toFixed(3),
-      "lArm:", this.#lArmBone?.rotation.x.toFixed(3),
-      "lElbow:", this.#lElbowBone?.rotation.x.toFixed(3));
+    setBone(this.#headBone,  { x: this.#basePose.headX, y: 0, z: this.#basePose.headZ });
+    // A-pose → arms down: rotate shoulder Z axis inward
+    setBone(this.#lArmBone,  { x: 0, y: 0, z: this.#basePose.lArmZ });
+    setBone(this.#rArmBone,  { x: 0, y: 0, z: this.#basePose.rArmZ });
+    // Elbows — slight bend
+    setBone(this.#lElbowBone, { x: this.#basePose.lElbowX, y: 0, z: 0.05 });
+    setBone(this.#rElbowBone, { x: this.#basePose.rElbowX, y: 0, z: -0.05 });
   }
 
   #applyIdle(dt) {
     if (!this.#mesh) return;
 
     // Gentle whole-body sway
-    this.#mesh.rotation.y = Math.sin(this.#idleTime * 0.35) * 0.04;
+    this.#mesh.rotation.y = Math.sin(this.#idleTime * 0.35) * 0.03;
 
-    // Subtle breathing bob
-    this.#mesh.position.y = Math.sin(this.#idleTime * 0.7) * 0.06;
+    // Breathing bob from fixed base Y
+    this.#mesh.position.y = this.#baseY + Math.sin(this.#idleTime * 0.7) * 0.04;
 
-    // Head bone — slow look-around
+    // Head — oscillate around base pose
     if (this.#headBone) {
-      this.#headBone.rotation.x = Math.sin(this.#idleTime * 0.45) * 0.015;
+      this.#headBone.rotation.x = this.#basePose.headX + Math.sin(this.#idleTime * 0.45) * 0.01;
       this.#headBone.rotation.y = Math.sin(this.#idleTime * 0.4 + 1.2) * 0.04;
-      this.#headBone.rotation.z = Math.sin(this.#idleTime * 0.35 + 0.7) * 0.01;
+      this.#headBone.rotation.z = this.#basePose.headZ + Math.sin(this.#idleTime * 0.35 + 0.7) * 0.008;
     }
 
     // Body bone — subtle breathing tilt
     if (this.#bodyBone) {
-      this.#bodyBone.rotation.x = Math.sin(this.#idleTime * 0.8) * 0.008;
+      this.#bodyBone.rotation.x = Math.sin(this.#idleTime * 0.8) * 0.006;
     }
 
     // Blink morph

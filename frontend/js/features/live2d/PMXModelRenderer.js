@@ -1,9 +1,8 @@
 // ---------------------------------------------------------------------------
 // PMXModelRenderer — 3D MMD model via Three.js + MMDLoader
 // ---------------------------------------------------------------------------
-// Loads .pmx models with textures. Renders with a 4-light studio rig,
-// MMDAnimationHelper-driven physics (skirt/hair), and code-driven idle
-// animations (blinking, breathing, head movement) — no .vmd files needed.
+// Loads .pmx models with textures. Renders with a 4-light studio rig
+// and code-driven idle animations (blinking, breathing, head movement).
 //
 // Requires: import map for "three" and "three/addons/" in index.html
 // Model path: models/<persona>/<model>.pmx
@@ -12,7 +11,6 @@
 import { ModelRenderer } from "./ModelRenderer.js";
 import * as T from "three";
 import { MMDLoader } from "three/addons/loaders/MMDLoader.js";
-import { MMDAnimationHelper } from "three/addons/animation/MMDAnimationHelper.js";
 
 // ---------------------------------------------------------------------------
 // Bone & morph names to probe (Japanese / Chinese / English)
@@ -39,9 +37,6 @@ export class PMXModelRenderer extends ModelRenderer {
 
   /** @type {import("three").SkinnedMesh | null} */
   #mesh = null;
-
-  /** @type {any | null} */
-  #helper = null;
 
   /** @type {import("three").Clock | null} */
   #clock = null;
@@ -162,12 +157,6 @@ export class PMXModelRenderer extends ModelRenderer {
 
       this.#scene.add(this.#mesh);
 
-      // Physics helper (drives skirt/hair physics even without .vmd animation)
-      try {
-        this.#helper = new MMDAnimationHelper({ afterglow: 2.0 });
-        this.#helper.add(this.#mesh, { animation: null, physics: false });
-      } catch (e) { throw step("Physics init")(e); }
-
       // Probe skeleton & morph targets for idle animation hooks
       try {
         this.#probeRig(this.#mesh.skeleton, this.#mesh.morphTargetDictionary);
@@ -200,9 +189,6 @@ export class PMXModelRenderer extends ModelRenderer {
     if (!this.loaded || !this.#renderer || !this.#scene || !this.#camera || !this.#clock) return;
 
     const dt = Math.min(this.#clock.getDelta(), 0.1);
-
-    // MMD physics (skirt, hair, accessories)
-    if (this.#helper) this.#helper.update(dt);
 
     // Code-driven idle animations
     if (this.#mesh) this.#applyIdle(dt);
@@ -274,11 +260,6 @@ export class PMXModelRenderer extends ModelRenderer {
   // -----------------------------------------------------------------------
 
   dispose() {
-    if (this.#helper && this.#mesh) {
-      this.#helper.remove(this.#mesh);
-      this.#helper = null;
-    }
-
     if (this.#mesh) {
       this.#mesh.traverse((child) => {
         if (child.geometry) child.geometry.dispose();

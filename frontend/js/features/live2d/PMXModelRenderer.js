@@ -10,22 +10,9 @@
 // ---------------------------------------------------------------------------
 
 import { ModelRenderer } from "./ModelRenderer.js";
-
-// Dynamic imports — Three.js only loads when PMX renderer is used.
-// The browser caches the module, so subsequent calls are instant.
-async function loadThreeModules() {
-  const [ns, mmd, helperMod] = await Promise.all([
-    import("three"),
-    import("three/addons/loaders/MMDLoader.js"),
-    import("three/addons/animation/MMDAnimationHelper.js"),
-  ]);
-  // The 'three' module's default export IS the THREE namespace
-  return {
-    T: ns.default || ns,
-    MMDLoader: mmd.MMDLoader,
-    MMDAnimationHelper: helperMod.MMDAnimationHelper,
-  };
-}
+import * as T from "three";
+import { MMDLoader } from "three/addons/loaders/MMDLoader.js";
+import { MMDAnimationHelper } from "three/addons/animation/MMDAnimationHelper.js";
 
 // ---------------------------------------------------------------------------
 // Bone & morph names to probe (Japanese / Chinese / English)
@@ -35,10 +22,6 @@ const BODY_BONE_NAMES  = ["上半身", "上半身2", "spine", "Spine", "chest", 
 const BLINK_MORPH_NAMES = ["まばたき", "blink", "Blink", "瞬き", "閉じる", "eyeClose"];
 
 export class PMXModelRenderer extends ModelRenderer {
-  // Three.js namespace — cached after load()
-  /** @type {any | null} */
-  #T = null;
-
   /** @type {HTMLCanvasElement | null} */
   #canvas = null;
 
@@ -101,22 +84,6 @@ export class PMXModelRenderer extends ModelRenderer {
     this.#canvas = document.createElement("canvas");
     this.#canvas.style.cssText = "display:block;position:absolute;top:0;left:0;";
     container.appendChild(this.#canvas);
-
-    // Load Three.js modules (cached after first import) -----------------------
-
-    let T, MMDLoader, MMDAnimationHelper;
-    try {
-      const mods = await loadThreeModules();
-      T = mods.T;
-      MMDLoader = mods.MMDLoader;
-      MMDAnimationHelper = mods.MMDAnimationHelper;
-      this.#T = T; // cache for hitTest/resize/dispose
-    } catch (err) {
-      console.error("[PMX] Failed to load Three.js:", err);
-      this.#showOverlay("Three.js failed to load");
-      this.loaded = true;
-      return;
-    }
 
     // Scene ------------------------------------------------------------------
     this.#scene = new T.Scene();
@@ -225,7 +192,7 @@ export class PMXModelRenderer extends ModelRenderer {
   update(_deltaTime) {
     if (!this.loaded || !this.#renderer || !this.#scene || !this.#camera || !this.#clock) return;
 
-    const dt = Math.min(this.#clock.getDelta(), 0.1); // cap to prevent spiral
+    const dt = Math.min(this.#clock.getDelta(), 0.1);
 
     // MMD physics (skirt, hair, accessories)
     if (this.#helper) this.#helper.update(dt);
@@ -238,7 +205,7 @@ export class PMXModelRenderer extends ModelRenderer {
   }
 
   // -----------------------------------------------------------------------
-  // Hit test (synchronous — uses cached THREE namespace)
+  // Hit test
   // -----------------------------------------------------------------------
 
   /**
@@ -247,8 +214,7 @@ export class PMXModelRenderer extends ModelRenderer {
    * @returns {string | null}
    */
   hitTest(x, y) {
-    const T = this.#T;
-    if (!T || !this.#mesh || !this.#camera || !this.#canvas) return null;
+    if (!this.#mesh || !this.#camera || !this.#canvas) return null;
 
     const rect = this.#canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return null;
@@ -264,7 +230,6 @@ export class PMXModelRenderer extends ModelRenderer {
     const hits = raycaster.intersectObject(this.#mesh, true);
     if (hits.length === 0) return null;
 
-    // Classify hit by vertical position within bounding box
     const box = new T.Box3().setFromObject(this.#mesh);
     const h = box.max.y - box.min.y;
     if (h <= 0) return "body";
@@ -274,7 +239,6 @@ export class PMXModelRenderer extends ModelRenderer {
 
   /**
    * Tap feedback — quick scale bounce.
-   * @param {string} _region
    */
   playMotion(_region) {
     if (!this.#mesh) return;
@@ -303,13 +267,11 @@ export class PMXModelRenderer extends ModelRenderer {
   // -----------------------------------------------------------------------
 
   dispose() {
-    // Remove MMD helper
     if (this.#helper && this.#mesh) {
       this.#helper.remove(this.#mesh);
       this.#helper = null;
     }
 
-    // Dispose mesh tree (geometries, materials, textures)
     if (this.#mesh) {
       this.#mesh.traverse((child) => {
         if (child.geometry) child.geometry.dispose();
@@ -328,20 +290,17 @@ export class PMXModelRenderer extends ModelRenderer {
       this.#mesh = null;
     }
 
-    // Dispose WebGL renderer
     if (this.#renderer) {
       this.#renderer.dispose();
       this.#renderer = null;
     }
 
-    // Remove DOM
     this.#hideOverlay();
     if (this.#canvas?.parentNode) {
       this.#canvas.parentNode.removeChild(this.#canvas);
     }
     this.#canvas = null;
 
-    this.#T       = null;
     this.#scene   = null;
     this.#camera  = null;
     this.#headBone = null;
@@ -355,10 +314,8 @@ export class PMXModelRenderer extends ModelRenderer {
   // Private helpers
   // =======================================================================
 
-  /** Fit camera to model bounding box. */
   #fitCamera() {
-    const T = this.#T;
-    if (!T || !this.#mesh || !this.#camera) return;
+    if (!this.#mesh || !this.#camera) return;
     const box = new T.Box3().setFromObject(this.#mesh);
     const center = box.getCenter(new T.Vector3());
     const size   = box.getSize(new T.Vector3());
@@ -402,7 +359,6 @@ export class PMXModelRenderer extends ModelRenderer {
 
   // -- idle animation --------------------------------------------------------
 
-  /** @param {number} dt */
   #applyIdle(dt) {
     if (!this.#mesh) return;
 
@@ -434,36 +390,36 @@ export class PMXModelRenderer extends ModelRenderer {
 
     this.#blinkTimer += dt;
 
-    const CLOSE = 0.05;  // 50ms
-    const HOLD  = 0.06;  // 60ms
-    const OPEN  = 0.08;  // 80ms
+    const CLOSE = 0.05;
+    const HOLD  = 0.06;
+    const OPEN  = 0.08;
 
     switch (this.#blinkState) {
-      case 0: // open — waiting for next blink
+      case 0:
         if (this.#blinkTimer >= this.#nextBlink) {
           this.#blinkState = 1;
           this.#blinkTimer = 0;
         }
         break;
-      case 1: { // closing
+      case 1: {
         const t = Math.min(this.#blinkTimer / CLOSE, 1);
         influences[this.#blinkMorphIdx] = t;
         if (t >= 1) { this.#blinkState = 2; this.#blinkTimer = 0; }
         break;
       }
-      case 2: // closed — brief hold
+      case 2:
         if (this.#blinkTimer >= HOLD) {
           this.#blinkState = 3;
           this.#blinkTimer = 0;
         }
         break;
-      case 3: { // opening
+      case 3: {
         const t = Math.min(this.#blinkTimer / OPEN, 1);
         influences[this.#blinkMorphIdx] = 1 - t;
         if (t >= 1) {
           this.#blinkState = 0;
           this.#blinkTimer = 0;
-          this.#nextBlink = 2.5 + Math.random() * 3.5; // 2.5–6s
+          this.#nextBlink = 2.5 + Math.random() * 3.5;
         }
         break;
       }
@@ -472,7 +428,6 @@ export class PMXModelRenderer extends ModelRenderer {
 
   // -- overlay helpers -------------------------------------------------------
 
-  /** @param {string} text */
   #showOverlay(text) {
     if (this.#overlay) {
       this.#overlay.textContent = text;

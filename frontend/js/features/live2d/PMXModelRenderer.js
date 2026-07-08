@@ -48,10 +48,10 @@ export class PMXModelRenderer extends ModelRenderer {
   #bodyBone = null;
 
   /** @type {import("three").Bone | null} */
-  #lShoulder = null;
+  #lUpperArm = null;
 
   /** @type {import("three").Bone | null} */
-  #rShoulder = null;
+  #rUpperArm = null;
 
   /** @type {number} */
   #blinkMorphIdx = -1;
@@ -329,10 +329,10 @@ export class PMXModelRenderer extends ModelRenderer {
         const b = skeleton.getBoneByName(name);
         if (b) { this.#bodyBone = b; break; }
       }
-      const lShoulder = skeleton.getBoneByName("左肩");
-      const rShoulder = skeleton.getBoneByName("右肩");
-      if (lShoulder) this.#lShoulder = lShoulder;
-      if (rShoulder) this.#rShoulder = rShoulder;
+      const lUpperArm = skeleton.getBoneByName("左腕");
+      const rUpperArm = skeleton.getBoneByName("右腕");
+      if (lUpperArm) this.#lUpperArm = lUpperArm;
+      if (rUpperArm) this.#rUpperArm = rUpperArm;
     }
     if (morphDict) {
       for (const name of BLINK_MORPH_NAMES) {
@@ -356,9 +356,9 @@ export class PMXModelRenderer extends ModelRenderer {
     if (this.#headBone) {
       this.#headBone.rotation.set(this.#basePose.headX, 0, this.#basePose.headZ);
     }
-    // Rotate shoulders to bring arms down from A-pose (rotate around Z axis)
-    if (this.#lShoulder) this.#lShoulder.rotateZ(-0.35);
-    if (this.#rShoulder) this.#rShoulder.rotateZ(0.35);
+    // Rotate upper arms (腕) to bring arms down from A-pose
+    if (this.#lUpperArm) this.#lUpperArm.rotateZ(-0.4);
+    if (this.#rUpperArm) this.#rUpperArm.rotateZ(0.4);
   }
 
   #applyIdle(dt) {

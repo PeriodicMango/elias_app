@@ -20,9 +20,9 @@ const BODY_BONE_NAMES  = ["上半身", "上半身2", "spine", "Spine", "chest", 
 const BLINK_MORPH_NAMES = ["まばたき", "blink", "Blink", "瞬き", "閉じる", "eyeClose"];
 const HAIR_BONE_NAMES = [
   "中劉海1", "左劉海1", "右劉海1",
-  "左側髪1-1", "右側髪1-1",
+  "左側髪1-1", "右側髪1-1", "右側髪1-11",
   "後髪", "後碎髮1", "右下側髪1",
-  "右辮子1", "左後側髪1-1",
+  "右辮子1", "左後側髪1-1", "左後側髪2-1",
 ];
 
 export class PMXModelRenderer extends ModelRenderer {
@@ -403,16 +403,10 @@ export class PMXModelRenderer extends ModelRenderer {
       this.#bodyBone.rotation.x = Math.sin(this.#idleTime * 0.8) * 0.006;
     }
 
-    // Arms — gentle sway with breathing
-    const armSway = Math.sin(this.#idleTime * 0.7) * 0.015;
-    if (this.#lUpperArm) this.#lUpperArm.rotateX(armSway);
-    if (this.#rUpperArm) this.#rUpperArm.rotateX(armSway);
-
-    // Hair — soft physics-like sway (each bone with slight phase offset)
+    // Hair — subtle side-to-side sway only (no forward/back to avoid clipping)
     for (let i = 0; i < this.#hairBones.length; i++) {
-      const phase = i * 0.6;
-      this.#hairBones[i].rotateX(Math.sin(this.#idleTime * 1.2 + phase) * 0.008);
-      this.#hairBones[i].rotateZ(Math.cos(this.#idleTime * 0.9 + phase) * 0.006);
+      const phase = i * 0.7;
+      this.#hairBones[i].rotateZ(Math.sin(this.#idleTime * 0.8 + phase) * 0.004);
     }
 
     // Blink morph

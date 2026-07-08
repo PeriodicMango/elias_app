@@ -18,8 +18,8 @@ import { MMDLoader } from "three/addons/loaders/MMDLoader.js";
 const HEAD_BONE_NAMES  = ["頭", "首", "head", "Head", "neck", "Neck"];
 const BODY_BONE_NAMES  = ["上半身", "上半身2", "spine", "Spine", "chest", "Chest"];
 const BLINK_MORPH_NAMES = ["まばたき", "blink", "Blink", "瞬き", "閉じる", "eyeClose"];
-const L_ARM_BONE_NAMES = ["左肩", "左腕", "arm_L", "Arm_L", "shoulder_L", "LeftArm", "left arm"];
-const R_ARM_BONE_NAMES = ["右肩", "右腕", "arm_R", "Arm_R", "shoulder_R", "RightArm", "right arm"];
+const L_ARM_BONE_NAMES = ["左肩", "左腕", "左腕捩", "左ひじ", "左肩P", "肩.L", "arm_L", "Arm_L", "shoulder_L", "LeftArm", "left arm", "upper_arm.L"];
+const R_ARM_BONE_NAMES = ["右肩", "右腕", "右腕捩", "右ひじ", "右肩P", "肩.R", "arm_R", "Arm_R", "shoulder_R", "RightArm", "right arm", "upper_arm.R"];
 
 export class PMXModelRenderer extends ModelRenderer {
   /** @type {HTMLCanvasElement | null} */
@@ -319,6 +319,9 @@ export class PMXModelRenderer extends ModelRenderer {
    */
   #probeRig(skeleton, morphDict) {
     if (skeleton) {
+      // Log all bone names for debugging
+      console.log("[PMX] Skeleton bones:", skeleton.bones.map(b => b.name));
+
       for (const name of HEAD_BONE_NAMES) {
         const b = skeleton.getBoneByName(name);
         if (b) { this.#headBone = b; break; }

@@ -396,10 +396,6 @@ export class PMXModelRenderer extends ModelRenderer {
       this.#rUpperArm.rotateZ(0.65);
       this.#rUpperArm.rotateX(0.08);
     }
-    // Gravity: rotate chain roots to hang downward
-    for (const b of [...this.#chainRoots, ...this.#hairBones]) {
-      b.rotateX(0.03);
-    }
   }
 
   #applyIdle(dt) {
@@ -425,14 +421,15 @@ export class PMXModelRenderer extends ModelRenderer {
       this.#bodyBone.rotation.x = Math.sin(this.#idleTime * 0.8) * 0.006;
     }
 
-    // Chain physics — follow body sway with delay (gravity-like trailing)
+    // Chain physics — follow body sway with delay (absolute rotation, no accumulation)
     const allChains = [...this.#chainRoots, ...this.#hairBones];
-    const bodySwayZ = Math.sin(this.#idleTime * 0.35) * 0.03; // body rotation Z
     for (let i = 0; i < allChains.length; i++) {
       const delay = 0.2 + i * 0.08;
       const t = this.#idleTime - delay;
-      // Follow body movement with phase lag
-      allChains[i].rotateZ(Math.sin(t * 0.35) * 0.01);
+      const sway = Math.sin(t * 0.35) * 0.008;
+      const b = allChains[i];
+      // Absolute: base gravity tilt + trailing sway
+      b.rotation.set(0.03, 0, sway);
     }
 
     // Blink morph

@@ -18,10 +18,6 @@ import { MMDLoader } from "three/addons/loaders/MMDLoader.js";
 const HEAD_BONE_NAMES  = ["頭", "首", "head", "Head", "neck", "Neck"];
 const BODY_BONE_NAMES  = ["上半身", "上半身2", "spine", "Spine", "chest", "Chest"];
 const BLINK_MORPH_NAMES = ["まばたき", "blink", "Blink", "瞬き", "閉じる", "eyeClose"];
-const L_ARM_BONE_NAMES = ["左肩", "左腕", "左ひじ"];
-const R_ARM_BONE_NAMES = ["右肩", "右腕", "右ひじ"];
-const L_ELBOW_BONE_NAMES = ["左ひじ", "左腕捩"];
-const R_ELBOW_BONE_NAMES = ["右ひじ", "右腕捩"];
 
 export class PMXModelRenderer extends ModelRenderer {
   /** @type {HTMLCanvasElement | null} */
@@ -50,18 +46,6 @@ export class PMXModelRenderer extends ModelRenderer {
 
   /** @type {import("three").Bone | null} */
   #bodyBone = null;
-
-  /** @type {import("three").Bone | null} */
-  #lArmBone = null;
-
-  /** @type {import("three").Bone | null} */
-  #rArmBone = null;
-
-  /** @type {import("three").Bone | null} */
-  #lElbowBone = null;
-
-  /** @type {import("three").Bone | null} */
-  #rElbowBone = null;
 
   /** @type {number} */
   #blinkMorphIdx = -1;
@@ -298,10 +282,6 @@ export class PMXModelRenderer extends ModelRenderer {
     this.#camera  = null;
     this.#headBone = null;
     this.#bodyBone = null;
-    this.#lArmBone = null;
-    this.#rArmBone = null;
-    this.#lElbowBone = null;
-    this.#rElbowBone = null;
     this.#clock   = null;
     this.container = null;
     this.loaded   = false;
@@ -343,22 +323,6 @@ export class PMXModelRenderer extends ModelRenderer {
         const b = skeleton.getBoneByName(name);
         if (b) { this.#bodyBone = b; break; }
       }
-      for (const name of L_ARM_BONE_NAMES) {
-        const b = skeleton.getBoneByName(name);
-        if (b) { this.#lArmBone = b; break; }
-      }
-      for (const name of R_ARM_BONE_NAMES) {
-        const b = skeleton.getBoneByName(name);
-        if (b) { this.#rArmBone = b; break; }
-      }
-      for (const name of L_ELBOW_BONE_NAMES) {
-        const b = skeleton.getBoneByName(name);
-        if (b) { this.#lElbowBone = b; break; }
-      }
-      for (const name of R_ELBOW_BONE_NAMES) {
-        const b = skeleton.getBoneByName(name);
-        if (b) { this.#rElbowBone = b; break; }
-      }
     }
     if (morphDict) {
       for (const name of BLINK_MORPH_NAMES) {
@@ -375,24 +339,13 @@ export class PMXModelRenderer extends ModelRenderer {
   // Base pose rotations (set once, idle anim oscillates around these)
   #basePose = {
     headX: 0.04, headZ: 0.02,
-    lArmZ: -0.15, rArmZ: 0.15,
-    lElbowX: -0.25, rElbowX: -0.25,
   };
 
-  /** Set initial relaxed idle pose — arms down from A-pose, head tilted. */
+  /** Set initial relaxed idle pose — subtle head tilt only. */
   #setIdlePose() {
-    const setBone = (bone, rot) => {
-      if (!bone) return;
-      bone.quaternion.identity();
-      bone.rotation.set(rot.x ?? 0, rot.y ?? 0, rot.z ?? 0);
-    };
-    setBone(this.#headBone,  { x: this.#basePose.headX, y: 0, z: this.#basePose.headZ });
-    // A-pose → arms down: rotate shoulder Z axis inward
-    setBone(this.#lArmBone,  { x: 0, y: 0, z: this.#basePose.lArmZ });
-    setBone(this.#rArmBone,  { x: 0, y: 0, z: this.#basePose.rArmZ });
-    // Elbows — slight bend
-    setBone(this.#lElbowBone, { x: this.#basePose.lElbowX, y: 0, z: 0.05 });
-    setBone(this.#rElbowBone, { x: this.#basePose.rElbowX, y: 0, z: -0.05 });
+    if (this.#headBone) {
+      this.#headBone.rotation.set(this.#basePose.headX, 0, this.#basePose.headZ);
+    }
   }
 
   #applyIdle(dt) {

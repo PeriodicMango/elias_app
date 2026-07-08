@@ -359,10 +359,6 @@ export class PMXModelRenderer extends ModelRenderer {
         const b = skeleton.getBoneByName(name);
         if (b) { this.#rElbowBone = b; break; }
       }
-      // Log what was found
-      console.log("[PMX] Rig probed — head:", !!this.#headBone, "body:", !!this.#bodyBone,
-        "lArm:", !!this.#lArmBone, "rArm:", !!this.#rArmBone,
-        "lElbow:", !!this.#lElbowBone, "rElbow:", !!this.#rElbowBone);
     }
     if (morphDict) {
       for (const name of BLINK_MORPH_NAMES) {
@@ -378,9 +374,9 @@ export class PMXModelRenderer extends ModelRenderer {
 
   // Base pose rotations (set once, idle anim oscillates around these)
   #basePose = {
-    headX: 0.06, headZ: 0.03,
-    lArmZ: -0.5, rArmZ: 0.5,
-    lElbowX: -0.6, rElbowX: -0.6,
+    headX: 0.04, headZ: 0.02,
+    lArmZ: -0.15, rArmZ: 0.15,
+    lElbowX: -0.25, rElbowX: -0.25,
   };
 
   /** Set initial relaxed idle pose — arms down from A-pose, head tilted. */

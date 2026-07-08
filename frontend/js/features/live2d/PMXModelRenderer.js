@@ -26,8 +26,6 @@ const HAIR_BONE_NAMES = [
 ];
 // Skirt/cape chain root bones — first bone of each physics chain
 const CHAIN_ROOT_NAMES = [
-  "右披肩前", "左披肩前",
-  "右披肩後1-1", "左披肩後1-1",
   "右長披肩1", "左長披肩1",
   "領巾",
 ];

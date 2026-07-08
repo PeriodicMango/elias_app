@@ -18,6 +18,12 @@ import { MMDLoader } from "three/addons/loaders/MMDLoader.js";
 const HEAD_BONE_NAMES  = ["頭", "首", "head", "Head", "neck", "Neck"];
 const BODY_BONE_NAMES  = ["上半身", "上半身2", "spine", "Spine", "chest", "Chest"];
 const BLINK_MORPH_NAMES = ["まばたき", "blink", "Blink", "瞬き", "閉じる", "eyeClose"];
+const HAIR_BONE_NAMES = [
+  "中劉海1", "左劉海1", "右劉海1",
+  "左側髪1-1", "右側髪1-1",
+  "後髪", "後碎髮1", "右下側髪1",
+  "右辮子1", "左後側髪1-1",
+];
 
 export class PMXModelRenderer extends ModelRenderer {
   /** @type {HTMLCanvasElement | null} */
@@ -52,6 +58,9 @@ export class PMXModelRenderer extends ModelRenderer {
 
   /** @type {import("three").Bone | null} */
   #rUpperArm = null;
+
+  /** @type {import("three").Bone[]} */
+  #hairBones = [];
 
   /** @type {number} */
   #blinkMorphIdx = -1;
@@ -333,6 +342,10 @@ export class PMXModelRenderer extends ModelRenderer {
       const rUpperArm = skeleton.getBoneByName("右腕");
       if (lUpperArm) this.#lUpperArm = lUpperArm;
       if (rUpperArm) this.#rUpperArm = rUpperArm;
+      for (const name of HAIR_BONE_NAMES) {
+        const b = skeleton.getBoneByName(name);
+        if (b) this.#hairBones.push(b);
+      }
     }
     if (morphDict) {
       for (const name of BLINK_MORPH_NAMES) {
@@ -356,9 +369,15 @@ export class PMXModelRenderer extends ModelRenderer {
     if (this.#headBone) {
       this.#headBone.rotation.set(this.#basePose.headX, 0, this.#basePose.headZ);
     }
-    // Rotate upper arms (腕) to bring arms down from A-pose
-    if (this.#lUpperArm) this.#lUpperArm.rotateZ(-0.4);
-    if (this.#rUpperArm) this.#rUpperArm.rotateZ(0.4);
+    // Rotate upper arms (腕) down from A-pose to natural hanging position
+    if (this.#lUpperArm) {
+      this.#lUpperArm.rotateZ(-0.55);
+      this.#lUpperArm.rotateX(0.1);
+    }
+    if (this.#rUpperArm) {
+      this.#rUpperArm.rotateZ(0.55);
+      this.#rUpperArm.rotateX(0.1);
+    }
   }
 
   #applyIdle(dt) {
@@ -382,6 +401,18 @@ export class PMXModelRenderer extends ModelRenderer {
     // Body bone — subtle breathing tilt
     if (this.#bodyBone) {
       this.#bodyBone.rotation.x = Math.sin(this.#idleTime * 0.8) * 0.006;
+    }
+
+    // Arms — gentle sway with breathing
+    const armSway = Math.sin(this.#idleTime * 0.7) * 0.015;
+    if (this.#lUpperArm) this.#lUpperArm.rotateX(armSway);
+    if (this.#rUpperArm) this.#rUpperArm.rotateX(armSway);
+
+    // Hair — soft physics-like sway (each bone with slight phase offset)
+    for (let i = 0; i < this.#hairBones.length; i++) {
+      const phase = i * 0.6;
+      this.#hairBones[i].rotateX(Math.sin(this.#idleTime * 1.2 + phase) * 0.008);
+      this.#hairBones[i].rotateZ(Math.cos(this.#idleTime * 0.9 + phase) * 0.006);
     }
 
     // Blink morph

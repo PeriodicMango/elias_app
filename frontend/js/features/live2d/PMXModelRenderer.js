@@ -144,6 +144,7 @@ export class PMXModelRenderer extends ModelRenderer {
     this.#scene.add(ground);
 
     // Load PMX model ----------------------------------------------------------
+    const step = (label) => (err) => { throw new Error(`${label}: ${err?.message || err}`); };
     try {
       const loader = new MMDLoader();
       this.#mesh = await new Promise((resolve, reject) => {
@@ -155,27 +156,33 @@ export class PMXModelRenderer extends ModelRenderer {
               this.#showOverlay(`Loading model… ${Math.round((p.loaded / p.total) * 100)}%`);
             }
           },
-          reject,
+          (err) => reject(new Error(`MMDLoader error (${modelPath}): ${err?.message || err}`)),
         );
       });
 
       this.#scene.add(this.#mesh);
 
       // Physics helper (drives skirt/hair physics even without .vmd animation)
-      this.#helper = new MMDAnimationHelper({ afterglow: 2.0 });
-      this.#helper.add(this.#mesh, { animation: null, physics: true });
+      try {
+        this.#helper = new MMDAnimationHelper({ afterglow: 2.0 });
+        this.#helper.add(this.#mesh, { animation: null, physics: true });
+      } catch (e) { throw step("Physics init")(e); }
 
       // Probe skeleton & morph targets for idle animation hooks
-      this.#probeRig(this.#mesh.skeleton, this.#mesh.morphTargetDictionary);
+      try {
+        this.#probeRig(this.#mesh.skeleton, this.#mesh.morphTargetDictionary);
+      } catch (e) { throw step("Skeleton probe")(e); }
 
       // Fit camera to model bounding box
-      this.#fitCamera();
+      try {
+        this.#fitCamera();
+      } catch (e) { throw step("Camera fit")(e); }
 
       this.#hideOverlay();
       this.loaded = true;
     } catch (err) {
       console.error("[PMX] Failed to load model:", err, "| URL:", modelPath);
-      this.#showOverlay(`Failed to load model: ${err.message || err}`);
+      this.#showOverlay(`${err.message || err}`);
       this.loaded = true;
     }
 

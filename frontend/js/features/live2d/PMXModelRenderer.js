@@ -421,15 +421,19 @@ export class PMXModelRenderer extends ModelRenderer {
       this.#bodyBone.rotation.x = Math.sin(this.#idleTime * 0.8) * 0.006;
     }
 
-    // Chain physics — follow body sway with delay (absolute rotation, no accumulation)
-    const allChains = [...this.#chainRoots, ...this.#hairBones];
-    for (let i = 0; i < allChains.length; i++) {
+    // Chain physics — cape/skirt: gravity pull-down + body sway follow
+    for (let i = 0; i < this.#chainRoots.length; i++) {
       const delay = 0.2 + i * 0.08;
       const t = this.#idleTime - delay;
-      const sway = Math.sin(t * 0.35) * 0.008;
-      const b = allChains[i];
-      // Absolute: base gravity tilt + trailing sway
-      b.rotation.set(0.03, 0, sway);
+      const sway = Math.sin(t * 0.35) * 0.005;
+      this.#chainRoots[i].rotation.set(0.25, 0, sway);
+    }
+    // Hair: lighter gravity, micro-sway
+    for (let i = 0; i < this.#hairBones.length; i++) {
+      const delay = 0.15 + i * 0.06;
+      const t = this.#idleTime - delay;
+      const sway = Math.sin(t * 0.4) * 0.003;
+      this.#hairBones[i].rotation.set(0.06, 0, sway);
     }
 
     // Blink morph

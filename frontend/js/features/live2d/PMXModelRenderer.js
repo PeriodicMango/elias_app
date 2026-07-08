@@ -134,9 +134,6 @@ export class PMXModelRenderer extends ModelRenderer {
 
       this.#scene.add(this.#mesh);
 
-      // Apply anime / cel-shading to all materials
-      this.#applyToonShading(this.#mesh);
-
       // Add portrait frame around the canvas
       try {
         this.#probeRig(this.#mesh.skeleton, this.#mesh.morphTargetDictionary);
@@ -214,11 +211,13 @@ export class PMXModelRenderer extends ModelRenderer {
    * Tap feedback — quick scale bounce.
    */
   playMotion(_region) {
+    // Subtle acknowledgement — brief position bob instead of scale jump
     if (!this.#mesh) return;
-    this.#mesh.scale.set(1.03, 1.03, 1.03);
+    const originalY = this.#mesh.position.y;
+    this.#mesh.position.y = originalY + 0.2;
     setTimeout(() => {
-      if (this.#mesh) this.#mesh.scale.set(1, 1, 1);
-    }, 100);
+      if (this.#mesh) this.#mesh.position.y = originalY;
+    }, 150);
   }
 
   // -----------------------------------------------------------------------
@@ -281,32 +280,6 @@ export class PMXModelRenderer extends ModelRenderer {
   // =======================================================================
   // Private helpers
   // =======================================================================
-
-  /**
-   * Convert all materials on the mesh to cel/toon shading for anime look.
-   * Preserves textures while replacing the shading model.
-   * @param {import("three").SkinnedMesh} mesh
-   */
-  #applyToonShading(mesh) {
-    mesh.traverse((child) => {
-      if (!child.material) return;
-      const materials = Array.isArray(child.material) ? child.material : [child.material];
-      for (const mat of materials) {
-        if (!mat || mat.isToonMaterial) continue;
-        const map = mat.map || null;
-        const color = mat.color ? mat.color.getHex() : 0xffffff;
-        const toon = new T.MeshToonMaterial({
-          color,
-          map,
-          gradientMap: null,
-        });
-        // Keep emissive if present (for rim-light style effects)
-        if (mat.emissive) toon.emissive = mat.emissive;
-        if (mat.emissiveMap) toon.emissiveMap = mat.emissiveMap;
-        child.material = toon;
-      }
-    });
-  }
 
   #fitCamera() {
     if (!this.#mesh || !this.#camera) return;

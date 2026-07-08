@@ -310,8 +310,8 @@ export class PMXModelRenderer extends ModelRenderer {
     const maxDim = Math.max(size.x, size.y, size.z);
     if (maxDim <= 0) return;
 
-    const dist = maxDim * 1.6;
-    const eyeY = center.y + size.y * 0.15;
+    const dist = maxDim * 0.9;
+    const eyeY = center.y + size.y * 0.35;
     this.#camera.position.set(center.x, eyeY, center.z + dist);
     this.#camera.lookAt(center.x, eyeY, center.z);
     this.#camera.near = 0.1;

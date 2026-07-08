@@ -618,3 +618,36 @@ pre.log-output {
     width: 100% !important;
   }
 }
+
+/* ===================================================================
+   Models Tab
+   =================================================================== */
+
+.model-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.model-row:last-child {
+  border-bottom: none;
+}
+
+.model-type-badge {
+  font-size: var(--fs-sm);
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--accent-light);
+  color: var(--accent);
+  margin-left: var(--space-sm);
+  text-transform: uppercase;
+}
+
+.model-active-badge {
+  font-size: var(--fs-sm);
+  color: var(--accent);
+  font-weight: 600;
+  padding: 2px 8px;
+}

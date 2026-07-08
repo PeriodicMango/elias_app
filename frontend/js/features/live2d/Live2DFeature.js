@@ -169,6 +169,24 @@ export class Live2DFeature extends Feature {
   };
 
   // -----------------------------------------------------------------------
+  // Model switching
+  // -----------------------------------------------------------------------
+
+  /**
+   * Hot-switch the model without re-creating the feature instance.
+   * If currently mounted, unmounts then re-mounts with the new config.
+   * @param {string} rendererType — "canvas" | "pmx" | "live2d"
+   * @param {string} modelPath — path to the model file
+   */
+  async switchModel(rendererType, modelPath) {
+    const wasMounted = this.#renderer !== null;
+    if (wasMounted) await this.unmount();
+    this.config.rendererType = rendererType;
+    this.config.modelPath = modelPath;
+    if (wasMounted && this.container) await this.mount(this.container);
+  }
+
+  // -----------------------------------------------------------------------
   // Speech bubble style customization (placeholder)
   // -----------------------------------------------------------------------
 

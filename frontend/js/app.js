@@ -8,7 +8,9 @@ const state = {
   personas: [],
   activePersona: "elias",
   activeTab: "live2d",
-  chatMessages: []
+  chatMessages: [],
+  models: [],
+  activeModel: null,
 };
 
 /** @type {import("./core/FeatureRegistry.js").FeatureRegistry} */
@@ -96,6 +98,8 @@ async function showApp() {
   // (patched into the global switchTab wrapper below)
 
   await loadPersonas();
+  await loadModels();
+  state.activeModel = resolveActiveModel();
   initFeatureRegistry();
   renderSidebar();
   loadTheme();
@@ -121,6 +125,27 @@ async function loadPersonas() {
   }
 }
 
+async function loadModels() {
+  try {
+    const data = await getJSON("/api/models");
+    state.models = data.models || [];
+  } catch (e) {
+    console.error("Failed to load models:", e);
+    state.models = [];
+  }
+}
+
+function resolveActiveModel() {
+  const stored = localStorage.getItem("elias-active-model");
+  if (stored) {
+    const match = state.models.find((m) => m.name === stored);
+    if (match) return match;
+  }
+  // Fall back to first available model
+  if (state.models.length > 0) return state.models[0];
+  return null;
+}
+
 // -----------------------------------------------------------------------
 // Feature Registry — OOP module system
 // -----------------------------------------------------------------------
@@ -128,13 +153,19 @@ async function loadPersonas() {
 function initFeatureRegistry() {
   registry = FeatureRegistry.instance;
 
-  // Register all features
-  registry.register(new Live2DFeature({ persona: state.activePersona }));
+  // Register all features — use dynamically resolved model config
+  const m = state.activeModel;
+  registry.register(new Live2DFeature({
+    persona: state.activePersona,
+    rendererType: m?.rendererType || "canvas",
+    modelPath: m?.modelPath || "",
+  }));
 
   // Define tab order
   registry.setTabs([
     { id: "live2d",  icon: "\u{1F9B8}", label: "Companion" },
     { id: "chat",    icon: "\u{1F4AC}", label: "Chat" },
+    { id: "models",  icon: "\u{1F3AE}", label: "Models" },
     { id: "goals",   icon: "\u{1F4CB}", label: "Goals" },
     { id: "clock",   icon: "\u{1F550}", label: "Clock" },
     { id: "weather", icon: "\u{1F324}️", label: "Weather" },
@@ -235,6 +266,9 @@ async function switchTab(tabId) {
         break;
       case "goals":
         await renderGoals();
+        break;
+      case "models":
+        await renderModelsTab();
         break;
       case "settings":
         await renderSettings();
@@ -618,6 +652,185 @@ async function openFile(path, source) {
   }
 }
 let kbCurrentFile = null;
+
+// -----------------------------------------------------------------------
+// Models Tab
+// -----------------------------------------------------------------------
+
+async function switchModel(model) {
+  state.activeModel = model;
+  localStorage.setItem("elias-active-model", model.name);
+  // Hot-switch the Live2D feature if it exists
+  const feature = registry?.get("live2d");
+  if (feature?.switchModel) {
+    await feature.switchModel(model.rendererType, model.modelPath);
+  }
+}
+
+async function renderModelsTab() {
+  const main = document.getElementById("main-content");
+
+  // Refresh model list from server
+  try {
+    const data = await getJSON("/api/models");
+    state.models = data.models || [];
+    // Re-resolve active model in case it was deleted
+    if (state.activeModel && !state.models.find((m) => m.name === state.activeModel.name)) {
+      state.activeModel = state.models.length > 0 ? state.models[0] : null;
+      if (state.activeModel) {
+        localStorage.setItem("elias-active-model", state.activeModel.name);
+      } else {
+        localStorage.removeItem("elias-active-model");
+      }
+    }
+  } catch (e) {
+    console.error("Failed to refresh models:", e);
+  }
+
+  const active = state.activeModel;
+  const activeName = active?.name || "";
+  const typeIcons = { pmx: "\u{1F3AE}", live2d: "\u{1F3AD}", unknown: "❓" };
+
+  main.innerHTML = `
+    <!-- Active Model -->
+    <div class="card">
+      <div class="card-header">⭐ Active Model</div>
+      <div class="card-body">
+        ${active
+          ? `<div class="model-row">
+              <span style="font-size:24px;">${typeIcons[active.rendererType] || "❓"}</span>
+              <div style="flex:1;">
+                <strong>${escapeHtml(active.name)}</strong>
+                <span class="model-type-badge">${escapeHtml(active.rendererType.toUpperCase())}</span>
+                <span style="font-size:var(--fs-sm);color:var(--text-secondary);">${active.fileCount} files</span>
+              </div>
+              <span class="model-active-badge">Active</span>
+            </div>`
+          : `<div style="color:var(--text-secondary);padding:var(--space-md);">
+              No model selected. Upload a model ZIP or pick one below.
+            </div>`
+        }
+      </div>
+    </div>
+
+    <!-- All Models -->
+    <div class="card">
+      <div class="card-header">\u{1F4E6} All Models (${state.models.length})</div>
+      <div class="card-body">
+        ${state.models.length === 0
+          ? `<div style="color:var(--text-secondary);padding:var(--space-md);">No models found. Upload one below.</div>`
+          : state.models.map((m) => `
+            <div class="model-row">
+              <span style="font-size:24px;">${typeIcons[m.rendererType] || "❓"}</span>
+              <div style="flex:1;">
+                <strong>${escapeHtml(m.name)}</strong>
+                <span class="model-type-badge">${escapeHtml(m.rendererType.toUpperCase())}</span>
+                <span style="font-size:var(--fs-sm);color:var(--text-secondary);">${m.fileCount} files</span>
+              </div>
+              ${m.name === activeName
+                ? '<span class="model-active-badge">Active</span>'
+                : `<button class="btn btn-sm btn-primary model-btn-select" data-name="${escapeHtml(m.name)}">Select</button>`
+              }
+              <button class="btn btn-sm btn-danger model-btn-delete" data-name="${escapeHtml(m.name)}">\u{1F5D1}</button>
+            </div>
+          `).join("")
+        }
+      </div>
+    </div>
+
+    <!-- Add Model -->
+    <div class="card">
+      <div class="card-header">➕ Add Model</div>
+      <div class="card-body">
+        <div style="display:flex;gap:var(--space-sm);align-items:flex-end;flex-wrap:wrap;">
+          <div class="form-group" style="flex:1;min-width:200px;">
+            <label class="form-label">Model Name</label>
+            <input class="form-input" id="model-name" placeholder="e.g. anaxagoras" style="width:100%;">
+          </div>
+          <div class="form-group" style="flex:2;min-width:250px;">
+            <label class="form-label">ZIP File</label>
+            <input type="file" class="form-input" id="model-file" accept=".zip" style="width:100%;">
+          </div>
+          <div class="form-group">
+            <button class="btn btn-primary" id="btn-upload-model">Upload</button>
+          </div>
+        </div>
+        <div id="upload-status" style="margin-top:var(--fs-sm);font-size:var(--fs-sm);"></div>
+      </div>
+    </div>
+  `;
+
+  // Select button handlers
+  main.querySelectorAll(".model-btn-select").forEach((btn) => {
+    btn.addEventListener("click", async function () {
+      const name = this.dataset.name;
+      const model = state.models.find((m) => m.name === name);
+      if (!model) return;
+      await switchModel(model);
+      renderModelsTab();
+    });
+  });
+
+  // Delete button handlers
+  main.querySelectorAll(".model-btn-delete").forEach((btn) => {
+    btn.addEventListener("click", async function () {
+      const name = this.dataset.name;
+      if (!confirm(`Delete model "${name}"? This cannot be undone.`)) return;
+      try {
+        await fetch(`/api/models/${encodeURIComponent(name)}`, { method: "DELETE" });
+        await renderModelsTab();
+      } catch (e) {
+        alert("Delete failed: " + (e.message || e));
+      }
+    });
+  });
+
+  // Upload button handler
+  const uploadBtn = document.getElementById("btn-upload-model");
+  if (uploadBtn) {
+    uploadBtn.addEventListener("click", async () => {
+      const nameInput = document.getElementById("model-name");
+      const fileInput = document.getElementById("model-file");
+      const status = document.getElementById("upload-status");
+
+      const name = nameInput.value.trim();
+      const file = fileInput.files[0];
+
+      if (!name) { status.innerHTML = '<span style="color:var(--danger);">Please enter a model name</span>'; return; }
+      if (!file) { status.innerHTML = '<span style="color:var(--danger);">Please select a ZIP file</span>'; return; }
+
+      status.innerHTML = '<span class="spinner"></span> Uploading...';
+
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("name", name);
+
+        const res = await fetch("/api/models", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: "Upload failed" }));
+          throw new Error(err.error || `HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        status.innerHTML = `<span style="color:var(--accent);">Model "${escapeHtml(data.model.name)}" uploaded!</span>`;
+        nameInput.value = "";
+        fileInput.value = "";
+
+        // Auto-select the new model
+        await switchModel(data.model);
+        renderModelsTab();
+      } catch (e) {
+        status.innerHTML = `<span style="color:var(--danger);">${escapeHtml(e.message)}</span>`;
+      }
+    });
+  }
+}
+
 async function renderGoals() {
   const main = document.getElementById("main-content");
   const data = await getJSON("/api/goals");

@@ -421,12 +421,11 @@ export class PMXModelRenderer extends ModelRenderer {
       this.#bodyBone.rotation.x = Math.sin(this.#idleTime * 0.8) * 0.006;
     }
 
-    // Chain physics — cape/skirt roots get stronger delayed sway
+    // Chain physics — cape/skirt roots get gentle delayed sway
     for (let i = 0; i < this.#chainRoots.length; i++) {
-      const phase = i * 0.4;
-      const sway = Math.sin(this.#idleTime * 0.6 + phase) * 0.015;
-      this.#chainRoots[i].rotateX(sway * 0.5);
-      this.#chainRoots[i].rotateZ(sway);
+      const phase = i * 0.5;
+      this.#chainRoots[i].rotateX(Math.sin(this.#idleTime * 0.5 + phase) * 0.003);
+      this.#chainRoots[i].rotateZ(Math.cos(this.#idleTime * 0.6 + phase) * 0.004);
     }
     // Hair — subtle micro-sway
     for (let i = 0; i < this.#hairBones.length; i++) {

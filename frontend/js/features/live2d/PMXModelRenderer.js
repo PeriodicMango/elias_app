@@ -355,6 +355,10 @@ export class PMXModelRenderer extends ModelRenderer {
         const b = skeleton.getBoneByName(name);
         if (b) { this.#rElbowBone = b; break; }
       }
+      // Log what was found
+      console.log("[PMX] Rig probed — head:", !!this.#headBone, "body:", !!this.#bodyBone,
+        "lArm:", !!this.#lArmBone, "rArm:", !!this.#rArmBone,
+        "lElbow:", !!this.#lElbowBone, "rElbow:", !!this.#rElbowBone);
     }
     if (morphDict) {
       for (const name of BLINK_MORPH_NAMES) {
@@ -370,29 +374,20 @@ export class PMXModelRenderer extends ModelRenderer {
 
   /** Set initial relaxed idle pose — head tilted, arms at sides, elbows bent. */
   #setIdlePose() {
-    // Head — slight natural tilt
-    if (this.#headBone) {
-      this.#headBone.rotation.x = 0.04;
-      this.#headBone.rotation.z = 0.025;
-    }
-    // Shoulders — bring arms down from A-pose to sides
-    if (this.#lArmBone) {
-      this.#lArmBone.rotation.x = 0.25;
-      this.#lArmBone.rotation.z = 0.12;
-    }
-    if (this.#rArmBone) {
-      this.#rArmBone.rotation.x = 0.25;
-      this.#rArmBone.rotation.z = -0.12;
-    }
-    // Elbows — slight natural bend
-    if (this.#lElbowBone) {
-      this.#lElbowBone.rotation.x = 0.3;
-      this.#lElbowBone.rotation.z = 0.05;
-    }
-    if (this.#rElbowBone) {
-      this.#rElbowBone.rotation.x = 0.3;
-      this.#rElbowBone.rotation.z = -0.05;
-    }
+    // Reset then set — override default A-pose bone rotations
+    const setBone = (bone, x, y, z) => {
+      if (!bone) return;
+      bone.quaternion.identity();
+      bone.rotation.set(x ?? 0, y ?? 0, z ?? 0);
+    };
+    setBone(this.#headBone, 0.04, 0, 0.025);
+    setBone(this.#lArmBone, 0.3, 0, 0.15);
+    setBone(this.#rArmBone, 0.3, 0, -0.15);
+    setBone(this.#lElbowBone, 0.4, 0, 0.08);
+    setBone(this.#rElbowBone, 0.4, 0, -0.08);
+    console.log("[PMX] Idle pose applied — head:", this.#headBone?.rotation.x.toFixed(3),
+      "lArm:", this.#lArmBone?.rotation.x.toFixed(3),
+      "lElbow:", this.#lElbowBone?.rotation.x.toFixed(3));
   }
 
   #applyIdle(dt) {

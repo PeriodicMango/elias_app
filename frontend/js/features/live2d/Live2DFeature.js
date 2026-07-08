@@ -10,7 +10,7 @@
 import { Feature } from "../../core/Feature.js";
 import { GreetingBubble } from "./GreetingBubble.js";
 import { CanvasPlaceholderRenderer } from "./CanvasPlaceholderRenderer.js";
-import { PMXModelRenderer } from "./PMXModelRenderer.js?v=3";
+import { PMXModelRenderer } from "./PMXModelRenderer.js?v=4";
 import { Live2DModelRenderer } from "./Live2DModelRenderer.js";
 
 /** @param {string} type */

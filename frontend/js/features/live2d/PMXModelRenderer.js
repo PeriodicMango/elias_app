@@ -75,10 +75,15 @@ export class PMXModelRenderer extends ModelRenderer {
       "color:var(--text-tertiary);font:14px var(--font);z-index:1;pointer-events:none;";
     container.appendChild(this.#overlay);
 
+    // Frame ------------------------------------------------------------------
+    const frame = document.createElement("div");
+    frame.className = "model-frame";
+    container.appendChild(frame);
+
     // Canvas -----------------------------------------------------------------
     this.#canvas = document.createElement("canvas");
     this.#canvas.style.cssText = "display:block;position:absolute;top:0;left:0;";
-    container.appendChild(this.#canvas);
+    frame.appendChild(this.#canvas);
 
     // Scene ------------------------------------------------------------------
     this.#scene = new T.Scene();
@@ -95,48 +100,20 @@ export class PMXModelRenderer extends ModelRenderer {
       antialias: true,
     });
     this.#renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.#renderer.shadowMap.enabled = true;
-    this.#renderer.shadowMap.type = T.PCFSoftShadowMap;
-    this.#renderer.toneMapping = T.ACESFilmicToneMapping;
-    this.#renderer.toneMappingExposure = 1.1;
+    this.#renderer.toneMapping = T.NoToneMapping;
     this.#renderer.outputColorSpace = T.SRGBColorSpace;
 
-    // Lighting rig (4 lights) ------------------------------------------------
-    // 1. Ambient — prevents pure-black shadows
-    this.#scene.add(new T.AmbientLight(0xffffff, 0.6));
+    // Lighting rig — flatter anime-style (3 lights) --------------------------
+    // 1. Ambient — bright even fill
+    this.#scene.add(new T.AmbientLight(0xffffff, 0.8));
 
-    // 2. Hemisphere — sky/ground color gradient
-    this.#scene.add(new T.HemisphereLight(0xd4e4ff, 0x3a2a1a, 0.5));
+    // 2. Hemisphere — subtle sky/ground gradient
+    this.#scene.add(new T.HemisphereLight(0xffffff, 0xb0a8c0, 0.3));
 
-    // 3. Key directional light (casts shadows) — upper front-right
-    const key = new T.DirectionalLight(0xfff5ee, 2.5);
-    key.position.set(5, 18, 12);
-    key.castShadow = true;
-    key.shadow.mapSize.set(1024, 1024);
-    key.shadow.camera.near   = 0.5;
-    key.shadow.camera.far    = 60;
-    key.shadow.camera.left   = -15;
-    key.shadow.camera.right  = 15;
-    key.shadow.camera.top    = 25;
-    key.shadow.camera.bottom = -5;
-    key.shadow.bias       = -0.0005;
-    key.shadow.normalBias = 0.02;
+    // 3. Key directional — front-facing, no shadows for clean anime look
+    const key = new T.DirectionalLight(0xfff5ee, 2.0);
+    key.position.set(0, 15, 10);
     this.#scene.add(key);
-
-    // 4. Rim light — behind the model, separates silhouette from background
-    const rim = new T.DirectionalLight(0xb0c8ff, 1.8);
-    rim.position.set(-3, 12, -8);
-    this.#scene.add(rim);
-
-    // Ground shadow receiver (invisible plane) --------------------------------
-    const ground = new T.Mesh(
-      new T.PlaneGeometry(50, 50),
-      new T.ShadowMaterial({ opacity: 0.25 }),
-    );
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -2;
-    ground.receiveShadow = true;
-    this.#scene.add(ground);
 
     // Load PMX model ----------------------------------------------------------
     const step = (label) => (err) => { throw new Error(`${label}: ${err?.message || err}`); };
@@ -157,7 +134,10 @@ export class PMXModelRenderer extends ModelRenderer {
 
       this.#scene.add(this.#mesh);
 
-      // Probe skeleton & morph targets for idle animation hooks
+      // Apply anime / cel-shading to all materials
+      this.#applyToonShading(this.#mesh);
+
+      // Add portrait frame around the canvas
       try {
         this.#probeRig(this.#mesh.skeleton, this.#mesh.morphTargetDictionary);
       } catch (e) { throw step("Skeleton probe")(e); }
@@ -301,6 +281,32 @@ export class PMXModelRenderer extends ModelRenderer {
   // =======================================================================
   // Private helpers
   // =======================================================================
+
+  /**
+   * Convert all materials on the mesh to cel/toon shading for anime look.
+   * Preserves textures while replacing the shading model.
+   * @param {import("three").SkinnedMesh} mesh
+   */
+  #applyToonShading(mesh) {
+    mesh.traverse((child) => {
+      if (!child.material) return;
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      for (const mat of materials) {
+        if (!mat || mat.isToonMaterial) continue;
+        const map = mat.map || null;
+        const color = mat.color ? mat.color.getHex() : 0xffffff;
+        const toon = new T.MeshToonMaterial({
+          color,
+          map,
+          gradientMap: null,
+        });
+        // Keep emissive if present (for rim-light style effects)
+        if (mat.emissive) toon.emissive = mat.emissive;
+        if (mat.emissiveMap) toon.emissiveMap = mat.emissiveMap;
+        child.material = toon;
+      }
+    });
+  }
 
   #fitCamera() {
     if (!this.#mesh || !this.#camera) return;

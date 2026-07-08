@@ -165,7 +165,7 @@ export class PMXModelRenderer extends ModelRenderer {
       // Physics helper (drives skirt/hair physics even without .vmd animation)
       try {
         this.#helper = new MMDAnimationHelper({ afterglow: 2.0 });
-        this.#helper.add(this.#mesh, { animation: null, physics: true });
+        this.#helper.add(this.#mesh, { animation: null, physics: false });
       } catch (e) { throw step("Physics init")(e); }
 
       // Probe skeleton & morph targets for idle animation hooks

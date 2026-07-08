@@ -18,6 +18,8 @@ import { MMDLoader } from "three/addons/loaders/MMDLoader.js";
 const HEAD_BONE_NAMES  = ["頭", "首", "head", "Head", "neck", "Neck"];
 const BODY_BONE_NAMES  = ["上半身", "上半身2", "spine", "Spine", "chest", "Chest"];
 const BLINK_MORPH_NAMES = ["まばたき", "blink", "Blink", "瞬き", "閉じる", "eyeClose"];
+const L_ARM_BONE_NAMES = ["左肩", "左腕", "arm_L", "Arm_L", "shoulder_L", "LeftArm", "left arm"];
+const R_ARM_BONE_NAMES = ["右肩", "右腕", "arm_R", "Arm_R", "shoulder_R", "RightArm", "right arm"];
 
 export class PMXModelRenderer extends ModelRenderer {
   /** @type {HTMLCanvasElement | null} */
@@ -46,6 +48,12 @@ export class PMXModelRenderer extends ModelRenderer {
 
   /** @type {import("three").Bone | null} */
   #bodyBone = null;
+
+  /** @type {import("three").Bone | null} */
+  #lArmBone = null;
+
+  /** @type {import("three").Bone | null} */
+  #rArmBone = null;
 
   /** @type {number} */
   #blinkMorphIdx = -1;
@@ -143,6 +151,12 @@ export class PMXModelRenderer extends ModelRenderer {
       try {
         this.#fitCamera();
       } catch (e) { throw step("Camera fit")(e); }
+
+      // Move model higher in frame
+      this.#mesh.position.y += 1.5;
+
+      // Set initial idle pose (arms relaxed, slight head tilt)
+      this.#setIdlePose();
 
       this.#hideOverlay();
       this.loaded = true;
@@ -313,6 +327,14 @@ export class PMXModelRenderer extends ModelRenderer {
         const b = skeleton.getBoneByName(name);
         if (b) { this.#bodyBone = b; break; }
       }
+      for (const name of L_ARM_BONE_NAMES) {
+        const b = skeleton.getBoneByName(name);
+        if (b) { this.#lArmBone = b; break; }
+      }
+      for (const name of R_ARM_BONE_NAMES) {
+        const b = skeleton.getBoneByName(name);
+        if (b) { this.#rArmBone = b; break; }
+      }
     }
     if (morphDict) {
       for (const name of BLINK_MORPH_NAMES) {
@@ -324,7 +346,25 @@ export class PMXModelRenderer extends ModelRenderer {
     }
   }
 
-  // -- idle animation --------------------------------------------------------
+  // -- idle pose & animation -------------------------------------------------
+
+  /** Set initial relaxed idle pose — arms slightly lowered, head tilted. */
+  #setIdlePose() {
+    // Head — slight tilt
+    if (this.#headBone) {
+      this.#headBone.rotation.x = 0.03;
+      this.#headBone.rotation.z = 0.02;
+    }
+    // Arms — relaxed at sides
+    if (this.#lArmBone) {
+      this.#lArmBone.rotation.x = 0.15;
+      this.#lArmBone.rotation.z = 0.08;
+    }
+    if (this.#rArmBone) {
+      this.#rArmBone.rotation.x = 0.15;
+      this.#rArmBone.rotation.z = -0.08;
+    }
+  }
 
   #applyIdle(dt) {
     if (!this.#mesh) return;

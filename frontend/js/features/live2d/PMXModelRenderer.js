@@ -11,7 +11,6 @@
 import { ModelRenderer } from "./ModelRenderer.js";
 import * as T from "three";
 import { MMDLoader } from "three/addons/loaders/MMDLoader.js";
-import { MMDAnimationHelper } from "three/addons/animation/MMDAnimationHelper.js";
 
 // ---------------------------------------------------------------------------
 // Bone & morph names to probe (Japanese / Chinese / English)
@@ -21,9 +20,15 @@ const BODY_BONE_NAMES  = ["上半身", "上半身2", "spine", "Spine", "chest", 
 const BLINK_MORPH_NAMES = ["まばたき", "blink", "Blink", "瞬き", "閉じる", "eyeClose"];
 const HAIR_BONE_NAMES = [
   "中劉海1", "左劉海1", "右劉海1",
-  "左側髪1-1", "右側髪1-1", "右側髪1-11",
+  "左側髪1-1", "右側髪1-1",
   "後髪", "後碎髮1", "右下側髪1",
   "右辮子1", "左後側髪1-1", "左後側髪2-1",
+];
+// Skirt/cape chain root bones — first bone of each physics chain
+const CHAIN_ROOT_NAMES = [
+  "右披肩親", "左披肩親",
+  "右長披肩1", "左長披肩1",
+  "領巾",
 ];
 
 export class PMXModelRenderer extends ModelRenderer {
@@ -63,8 +68,8 @@ export class PMXModelRenderer extends ModelRenderer {
   /** @type {import("three").Bone[]} */
   #hairBones = [];
 
-  /** @type {any | null} */
-  #helper = null;
+  /** @type {import("three").Bone[]} */
+  #chainRoots = [];
 
   /** @type {number} */
   #blinkMorphIdx = -1;
@@ -156,20 +161,6 @@ export class PMXModelRenderer extends ModelRenderer {
 
       this.#scene.add(this.#mesh);
 
-      // Physics — Ammo.js cloth/hair/skirt simulation
-      if (typeof Ammo !== "undefined") {
-        try {
-          // asm.js build: Ammo is the module directly
-          // WASM build: Ammo() returns a promise
-          const AmmoLib = typeof Ammo === "function" ? await Ammo() : Ammo;
-          self.Ammo = AmmoLib;
-          this.#helper = new MMDAnimationHelper({ afterglow: 2.0 });
-          this.#helper.add(this.#mesh, { animation: false, physics: true });
-        } catch (e) {
-          console.warn("[PMX] Physics init failed:", e.message || e);
-        }
-      }
-
       try {
         this.#probeRig(this.#mesh.skeleton, this.#mesh.morphTargetDictionary);
       } catch (e) { throw step("Skeleton probe")(e); }
@@ -208,9 +199,6 @@ export class PMXModelRenderer extends ModelRenderer {
     if (!this.loaded || !this.#renderer || !this.#scene || !this.#camera || !this.#clock) return;
 
     const dt = Math.min(this.#clock.getDelta(), 0.1);
-
-    // MMD physics (cloth, hair, skirt via Ammo.js)
-    if (this.#helper) this.#helper.update(dt);
 
     // Code-driven idle animations
     if (this.#mesh) this.#applyIdle(dt);
@@ -284,10 +272,6 @@ export class PMXModelRenderer extends ModelRenderer {
   // -----------------------------------------------------------------------
 
   dispose() {
-    if (this.#helper && this.#mesh) {
-      this.#helper.remove(this.#mesh);
-      this.#helper = null;
-    }
     if (this.#mesh) {
       this.#mesh.traverse((child) => {
         if (child.geometry) child.geometry.dispose();
@@ -370,6 +354,16 @@ export class PMXModelRenderer extends ModelRenderer {
         const b = skeleton.getBoneByName(name);
         if (b) this.#hairBones.push(b);
       }
+      for (const name of CHAIN_ROOT_NAMES) {
+        const b = skeleton.getBoneByName(name);
+        if (b) this.#chainRoots.push(b);
+      }
+      // Skirt hem chains (下摆_0_1 through 下摆_14_1)
+      for (let i = 0; i <= 14; i++) {
+        const b = skeleton.getBoneByName(`下摆_${i}_1`);
+        if (b) this.#chainRoots.push(b);
+      }
+      console.log("[PMX] Chain roots found:", this.#chainRoots.length, "hair bones:", this.#hairBones.length);
     }
     if (morphDict) {
       for (const name of BLINK_MORPH_NAMES) {
@@ -427,7 +421,14 @@ export class PMXModelRenderer extends ModelRenderer {
       this.#bodyBone.rotation.x = Math.sin(this.#idleTime * 0.8) * 0.006;
     }
 
-    // Hair — subtle side-to-side sway only (no forward/back to avoid clipping)
+    // Chain physics — cape/skirt roots get stronger delayed sway
+    for (let i = 0; i < this.#chainRoots.length; i++) {
+      const phase = i * 0.4;
+      const sway = Math.sin(this.#idleTime * 0.6 + phase) * 0.015;
+      this.#chainRoots[i].rotateX(sway * 0.5);
+      this.#chainRoots[i].rotateZ(sway);
+    }
+    // Hair — subtle micro-sway
     for (let i = 0; i < this.#hairBones.length; i++) {
       const phase = i * 0.7;
       this.#hairBones[i].rotateZ(Math.sin(this.#idleTime * 0.8 + phase) * 0.002);

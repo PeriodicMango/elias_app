@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { escapeHtml } from "./core/dom.js";
+import { getToken } from "./api.js";
 
 // ---------------------------------------------------------------------------
 // Greeting
@@ -16,7 +17,13 @@ async function loadGreeting(persona) {
   if (!textEl) return;
 
   try {
-    const data = await fetch(`/api/home/greeting?persona=${encodeURIComponent(persona)}`).then(r => r.json());
+    const token = getToken();
+    const headers = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const data = await fetch(`/api/home/greeting?persona=${encodeURIComponent(persona)}`, {
+      headers,
+      credentials: "include",
+    }).then(r => r.json());
     textEl.textContent = data.greeting || '嗯，来了。';
     if (personaEl) personaEl.textContent = `— ${persona}`;
   } catch {

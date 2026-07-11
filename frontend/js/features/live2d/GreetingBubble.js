@@ -5,6 +5,8 @@
 // as a floating speech bubble over the Live2D canvas.
 // ---------------------------------------------------------------------------
 
+import { getToken } from "../../api.js";
+
 const GREETING_API = "/api/home/greeting";
 
 export class GreetingBubble {
@@ -75,7 +77,13 @@ export class GreetingBubble {
    */
   async refresh() {
     try {
-      const res = await fetch(`${GREETING_API}?persona=${encodeURIComponent(this.#persona)}`);
+      const token = getToken();
+      const headers = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`${GREETING_API}?persona=${encodeURIComponent(this.#persona)}`, {
+        headers,
+        credentials: "include",
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       this.#text = data.greeting ?? "";

@@ -3,6 +3,8 @@
 // Registers service worker, subscribes to push, sends subscription to server.
 // ---------------------------------------------------------------------------
 
+import { getToken } from "./api.js";
+
 const SUBSCRIPTION_API = "/api/notifications/subscribe";
 const VAPID_PUBLIC_KEY =
   window.__ELIAS_VAPID_KEY__ ||
@@ -74,9 +76,12 @@ export async function unsubscribe() {
     const subscription = await registration.pushManager.getSubscription();
     if (subscription) {
       await subscription.unsubscribe();
+      const token = getToken();
+      const headers = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
       await fetch(`${SUBSCRIPTION_API}`, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ endpoint: subscription.endpoint }),
         credentials: "include",
       });
@@ -91,9 +96,12 @@ export async function unsubscribe() {
  * Send subscription object to server.
  */
 async function sendToServer(subscription) {
+  const token = getToken();
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
   await fetch(SUBSCRIPTION_API, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify(subscription.toJSON()),
     credentials: "include",
   });

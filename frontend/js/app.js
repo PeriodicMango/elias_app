@@ -1,4 +1,4 @@
-import { getJSON, postJSON } from "./api.js";
+import { getJSON, postJSON, getToken } from "./api.js";
 import { FeatureRegistry } from "./core/FeatureRegistry.js";
 import { widgetBridge } from "./core/WidgetBridge.js";
 import { Live2DFeature } from "./features/live2d/Live2DFeature.js";
@@ -16,6 +16,11 @@ const state = {
 
 /** @type {import("./core/FeatureRegistry.js").FeatureRegistry} */
 let registry = null;
+
+function avatarUrl(user, size = 64) {
+  if (!user?.avatar) return "";
+  return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=${size}`;
+}
 
 /** @type {number | null} */
 let timeTickInterval = null;
@@ -53,10 +58,7 @@ async function showApp() {
   document.getElementById("error-view").classList.add("hidden");
   document.getElementById("sidebar-username").textContent = state.user.username;
   if (state.user.avatar) {
-    document.getElementById("sidebar-avatar").setAttribute(
-      "src",
-      `https://cdn.discordapp.com/avatars/${state.user.id}/${state.user.avatar}.png?size=64`
-    );
+    document.getElementById("sidebar-avatar").src = avatarUrl(state.user);
   }
   document.getElementById("btn-logout").addEventListener("click", () => {
     window.location.href = "/auth/logout";
@@ -79,7 +81,7 @@ async function showApp() {
   };
   toggleBtn.addEventListener("click", doToggle);
   // Click logo area to expand when collapsed
-  document.querySelector(".sidebar-logo").addEventListener("click", (e) => {
+  document.querySelector(".sidebar-logo")?.addEventListener("click", (e) => {
     if (sidebar.classList.contains("collapsed") && e.target !== toggleBtn) doToggle();
   });
 
@@ -282,12 +284,6 @@ async function switchTab(tabId) {
   } catch (e) {
     main.innerHTML = `<div class="card"><div class="card-body">\u52A0\u8F7D\u5931\u8D25: ${e.message}</div></div>`;
   }
-  document.querySelectorAll(".nav-item").forEach((el) => {
-    const text = el.textContent?.trim().toLowerCase() ?? "";
-    const navIds = { home: ["home"], chat: ["chat"], personas: ["personas"], kb: ["knowledgebase"], goals: ["goals"], models: ["models"], settings: ["settings"], style: ["style"], live2d: ["companion"], weather: ["weather"] };
-    const matches = navIds[tabId] || [tabId];
-    el.classList.toggle("active", matches.some(m => text.includes(m)));
-  });
 }
 async function renderChat() {
   const main = document.getElementById("main-content");
@@ -326,9 +322,13 @@ async function renderChat() {
     fastTrack.classList.toggle("on", fastMode);
   });
   document.getElementById("btn-clear-history").addEventListener("click", async () => {
-    await postJSON("/api/chat/clear");
-    state.chatMessages = [];
-    msgs.innerHTML = '<div class="chat-empty">\u5386\u53F2\u5DF2\u6E05\u9664</div>';
+    try {
+      await postJSON("/api/chat/clear");
+      state.chatMessages = [];
+      msgs.innerHTML = '<div class="chat-empty">\u5386\u53F2\u5DF2\u6E05\u9664</div>';
+    } catch (e) {
+      console.error("Failed to clear history:", e);
+    }
   });
   async function send() {
     const text = input.value.trim();
@@ -389,14 +389,15 @@ async function renderChat() {
     input.value = pending;
     send();
   }
-  // Restore messages from state
-  for (const m of state.chatMessages) {
+  // Restore messages from state (copy first — addMsg pushes back)
+  const messages = [...state.chatMessages];
+  state.chatMessages = [];
+  for (const m of messages) {
     const restored = addMsg(m.role, m.content, false);
     if (m.loading) restored.classList.add("loading");
   }
 }
 let msgContainer = null;
-let msgCounter = 0;
 function addMsg(role, content, loading = false) {
   if (!msgContainer) throw new Error("Chat not rendered");
   const empty = msgContainer.querySelector(".chat-empty");
@@ -405,8 +406,8 @@ function addMsg(role, content, loading = false) {
   el.className = `msg ${role}${loading ? " loading" : ""}`;
   const persona = state.personas.find((p) => p.name === state.activePersona);
   const avatarLetter = role === "user" ? state.user?.username?.[0] || "U" : persona?.displayName?.[0] || "E";
-  const avatarUrl = role === "user" ? (state.user?.avatar ? `https://cdn.discordapp.com/avatars/${state.user.id}/${state.user.avatar}.png?size=64` : "") : (persona?.avatarUrl || "");
-  const avatarHTML = avatarUrl ? `<img src="${escapeHtml(avatarUrl)}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;" onerror="this.outerHTML='<span>${escapeHtml(avatarLetter)}</span>';" alt="">` : escapeHtml(avatarLetter);
+  const userAvatarUrl = role === "user" ? avatarUrl(state.user) : (persona?.avatarUrl || "");
+  const avatarHTML = userAvatarUrl ? `<img src="${escapeHtml(userAvatarUrl)}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;" onerror="this.outerHTML='<span>${escapeHtml(avatarLetter)}</span>';" alt="">` : escapeHtml(avatarLetter);
   el.innerHTML = `
     <div class="msg-avatar">${avatarHTML}</div>
     <div class="msg-bubble">
@@ -493,18 +494,17 @@ async function renderPersonasTab() {
       const card = this.closest(".card");
       const fileInput = card.querySelector("[data-field='avatarFile']");
       fileInput.click();
-      fileInput.addEventListener("change", function () {
+      fileInput.addEventListener("change", function handler() {
         const file = this.files[0];
         if (!file) return;
         const reader = new FileReader();
         reader.onload = function (e) {
           card.querySelector("[data-field='avatarUrl']").value = e.target.result;
-          // Update preview
           const img = card.querySelector(".card-header img");
           if (img) img.src = e.target.result;
         };
         reader.readAsDataURL(file);
-      });
+      }, { once: true });
     });
   });
 
@@ -533,9 +533,13 @@ async function renderPersonasTab() {
         : JSON.stringify({ fileContent: updatedContent, avatarUrl: avatarValue });
 
       try {
+        const token = getToken();
+        const headers = { "Content-Type": "application/json" };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
         await fetch(`/api/personas/${pname}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers,
+          credentials: "include",
           body,
         });
         alert("已保存！刷新页面后生效。");
@@ -585,9 +589,13 @@ async function renderKB() {
   document.getElementById("kb-delete").addEventListener("click", async () => {
     if (!kbCurrentFile || kbCurrentFile.source === "vault") return;
     if (!confirm(`\u786E\u8BA4\u5220\u9664 ${kbCurrentFile.path}?`)) return;
+    const token = getToken();
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
     await fetch("/api/vault/delete", {
       method: "DELETE",
-      headers: { "Content-Type": "application/json" },
+      headers,
+      credentials: "include",
       body: JSON.stringify({ filePath: kbCurrentFile.path })
     });
     kbCurrentFile = null;
@@ -693,7 +701,7 @@ async function renderModelsTab() {
 
   const active = state.activeModel;
   const activeName = active?.name || "";
-  const typeIcons = { pmx: "\u{1F3AE}", live2d: "\u{1F3AD}", unknown: "❓" };
+  const typeIcons = { pmx: "\u{1F3AE}", fbx: "\u{1F3AC}", live2d: "\u{1F3AD}", unknown: "❓" };
 
   main.innerHTML = `
     <!-- Active Model -->
@@ -781,7 +789,14 @@ async function renderModelsTab() {
       const name = this.dataset.name;
       if (!confirm(`Delete model "${name}"? This cannot be undone.`)) return;
       try {
-        await fetch(`/api/models/${encodeURIComponent(name)}`, { method: "DELETE" });
+        const token = getToken();
+        const headers = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        await fetch(`/api/models/${encodeURIComponent(name)}`, {
+          method: "DELETE",
+          headers,
+          credentials: "include",
+        });
         await renderModelsTab();
       } catch (e) {
         alert("Delete failed: " + (e.message || e));
@@ -810,8 +825,14 @@ async function renderModelsTab() {
         formData.append("file", file);
         formData.append("name", name);
 
+        const token = getToken();
+        const headers = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+
         const res = await fetch("/api/models", {
           method: "POST",
+          headers,
+          credentials: "include",
           body: formData,
         });
 
@@ -874,7 +895,15 @@ async function renderGoals() {
   document.querySelectorAll(".goal-checkbox").forEach((el) => {
     el.addEventListener("click", async function() {
       const id = this.dataset.id;
-      await fetch(`/api/goals/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "done" }) });
+      const token = getToken();
+      const headers = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      await fetch(`/api/goals/${id}`, {
+        method: "PUT",
+        headers,
+        credentials: "include",
+        body: JSON.stringify({ action: "done" }),
+      });
       renderGoals();
     });
   });
@@ -1021,7 +1050,15 @@ async function renderSettings() {
     const model = document.getElementById("api-model").value;
     const url = document.getElementById("api-url").value;
     const key = document.getElementById("api-key").value;
-    await fetch("/api/settings/api", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model, url, key: key || void 0 }) });
+    const token = getToken();
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    await fetch("/api/settings/api", {
+      method: "PUT",
+      headers,
+      credentials: "include",
+      body: JSON.stringify({ model, url, key: key || void 0 }),
+    });
     alert("API \u914D\u7F6E\u5DF2\u4FDD\u5B58\u3002");
   });
   document.getElementById("btn-pause").addEventListener("click", async () => {
@@ -1038,8 +1075,20 @@ async function renderSettings() {
       const persona = this.dataset.persona;
       const track = this.querySelector(".toggle-track");
       const on = !track.classList.contains("on");
-      await fetch(`/api/settings/proactive/${persona}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: on }) });
-      track.classList.toggle("on", on);
+      try {
+        const token = getToken();
+        const headers = { "Content-Type": "application/json" };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        await fetch(`/api/settings/proactive/${persona}`, {
+          method: "PUT",
+          headers,
+          credentials: "include",
+          body: JSON.stringify({ enabled: on }),
+        });
+        track.classList.toggle("on", on);
+      } catch (e) {
+        console.error("Failed to toggle proactive:", e);
+      }
     });
   });
   document.querySelectorAll(".toggle[data-gc-persona]").forEach((el) => {
@@ -1047,8 +1096,20 @@ async function renderSettings() {
       const persona = this.dataset.gcPersona;
       const track = this.querySelector(".toggle-track");
       const on = !track.classList.contains("on");
-      await fetch(`/api/settings/groupchat/${persona}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: on }) });
-      track.classList.toggle("on", on);
+      try {
+        const token = getToken();
+        const headers = { "Content-Type": "application/json" };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        await fetch(`/api/settings/groupchat/${persona}`, {
+          method: "PUT",
+          headers,
+          credentials: "include",
+          body: JSON.stringify({ enabled: on }),
+        });
+        track.classList.toggle("on", on);
+      } catch (e) {
+        console.error("Failed to toggle groupchat:", e);
+      }
     });
   });
   document.querySelectorAll(".btn-rename").forEach((btn) => {
@@ -1167,7 +1228,13 @@ function renderStyle() {
     });
   });
   document.getElementById("btn-reset-style").addEventListener("click", () => {
-    localStorage.clear();
+    // Only clear style-related keys, not auth/sidebar/model state
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith("elias-theme") || key.startsWith("elias-accent") ||
+          key.startsWith("elias-font-size") || key.startsWith("elias-card")) {
+        localStorage.removeItem(key);
+      }
+    }
     document.documentElement.removeAttribute("data-theme");
     document.documentElement.style.removeProperty("--accent");
     document.documentElement.style.removeProperty("--accent-light");

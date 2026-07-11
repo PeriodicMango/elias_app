@@ -27,7 +27,7 @@ export class CanvasPlaceholderRenderer extends ModelRenderer {
     this.container = container;
 
     this.#canvas = document.createElement("canvas");
-    this.#canvas.style.cssText = "display: block; position: absolute; top: 0; left: 0;";
+    this.#canvas.style.cssText = "display: block; width: 100%; height: 100%;";
     container.appendChild(this.#canvas);
 
     container.addEventListener("pointermove", this.#onPointerMove);
@@ -82,9 +82,9 @@ export class CanvasPlaceholderRenderer extends ModelRenderer {
     ctx.arc(cx, cy + headR * 0.3, headR * 0.2, 0.1 * Math.PI, 0.9 * Math.PI);
     ctx.stroke();
 
-    // Label
-    ctx.fillStyle = "var(--text-tertiary)";
-    ctx.font = "14px var(--font)";
+    // Label (use explicit colors — Canvas 2D doesn't resolve CSS var())
+    ctx.fillStyle = "#888";
+    ctx.font = "14px sans-serif";
     ctx.textAlign = "center";
     ctx.fillText("Model not configured", cx, h * 0.75);
   }

@@ -92,4 +92,4 @@ async function deleteJSON(path, body) {
   return request("DELETE", path, body);
 }
 
-export { deleteJSON, getJSON, postJSON, putJSON };
+export { deleteJSON, getJSON, getToken, postJSON, putJSON };

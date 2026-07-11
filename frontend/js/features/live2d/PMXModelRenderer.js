@@ -11,6 +11,7 @@
 import { ModelRenderer } from "./ModelRenderer.js";
 import * as T from "three";
 import { MMDLoader } from "three/addons/loaders/MMDLoader.js";
+import { MMDAnimationHelper } from "three/addons/animation/MMDAnimationHelper.js";
 
 // ---------------------------------------------------------------------------
 // Bone & morph names to probe (Japanese / Chinese / English)
@@ -52,29 +53,61 @@ export class PMXModelRenderer extends ModelRenderer {
   /** @type {import("three").Clock | null} */
   #clock = null;
 
+  // -- Skeleton bones ---------------------------------------------------------
   /** @type {import("three").Bone | null} */
   #headBone = null;
-
   /** @type {import("three").Bone | null} */
-  #bodyBone = null;
-
+  #neckBone = null;
+  /** @type {import("three").Bone | null} */
+  #upperBody = null;   // spine/chest
+  /** @type {import("three").Bone | null} */
+  #lowerBody = null;   // pelvis
+  /** @type {import("three").Bone | null} */
+  #groove = null;      // center of gravity
+  /** @type {import("three").Bone | null} */
+  #lShoulder = null;
+  /** @type {import("three").Bone | null} */
+  #rShoulder = null;
   /** @type {import("three").Bone | null} */
   #lUpperArm = null;
-
   /** @type {import("three").Bone | null} */
   #rUpperArm = null;
-
+  /** @type {import("three").Bone | null} */
+  #lElbow = null;
+  /** @type {import("three").Bone | null} */
+  #rElbow = null;
+  /** @type {import("three").Bone | null} */
+  #lWrist = null;
+  /** @type {import("three").Bone | null} */
+  #rWrist = null;
+  /** @type {import("three").Bone | null} */
+  #lKnee = null;
+  /** @type {import("three").Bone | null} */
+  #rKnee = null;
+  /** @type {import("three").Bone | null} */
+  #lLegIK = null;
+  /** @type {import("three").Bone | null} */
+  #rLegIK = null;
   /** @type {import("three").Bone[]} */
   #hairBones = [];
-
   /** @type {import("three").Bone[]} */
   #chainRoots = [];
+  /** @type {{ bone: import("three").Bone; finger: number; side: number }[]} */
+  #fingerBones = [];
 
   /** @type {number} */
   #blinkMorphIdx = -1;
 
   /** @type {number} — base Y position (set after fitCamera + offset) */
   #baseY = 0;
+
+  /** @type {import("three/addons/animation/MMDAnimationHelper.js").MMDAnimationHelper | null} */
+  #helper = null;
+
+  // Nod animation state ------------------------------------------------------
+  #nodTime   = 0;  // progresses from 0→1 over NOD_DURATION, then resets
+  static NOD_DURATION = 0.35;  // total nod cycle in seconds
+  static NOD_ANGLE    = 0.12;  // peak forward head tilt in radians
 
   // Idle state ---------------------------------------------------------------
   #idleTime   = 0;
@@ -106,9 +139,9 @@ export class PMXModelRenderer extends ModelRenderer {
     frame.className = "model-frame";
     container.appendChild(frame);
 
-    // Canvas -----------------------------------------------------------------
+    // Canvas — fills the frame via CSS (#live2d-canvas)
     this.#canvas = document.createElement("canvas");
-    this.#canvas.style.cssText = "display:block;position:absolute;top:0;left:0;";
+    this.#canvas.id = "live2d-canvas";
     frame.appendChild(this.#canvas);
 
     // Scene ------------------------------------------------------------------
@@ -160,6 +193,14 @@ export class PMXModelRenderer extends ModelRenderer {
 
       this.#scene.add(this.#mesh);
 
+      // Enable MMD physics — handles cloth/hair rigid-body simulation
+      this.#helper = new MMDAnimationHelper({
+        afterglow: 0.5,
+        pmxAnimation: false,
+        physics: true,
+      });
+      this.#helper.add(this.#mesh, { physics: true });
+
       try {
         this.#probeRig(this.#mesh.skeleton, this.#mesh.morphTargetDictionary);
       } catch (e) { throw step("Skeleton probe")(e); }
@@ -181,7 +222,6 @@ export class PMXModelRenderer extends ModelRenderer {
     } catch (err) {
       console.error("[PMX] Failed to load model:", err, "| URL:", modelPath);
       this.#showOverlay(`${err.message || err}`);
-      this.loaded = true;
     }
 
     // Stagger the idle phase
@@ -198,6 +238,9 @@ export class PMXModelRenderer extends ModelRenderer {
     if (!this.loaded || !this.#renderer || !this.#scene || !this.#camera || !this.#clock) return;
 
     const dt = Math.min(this.#clock.getDelta(), 0.1);
+
+    // MMD physics — cloth, hair, rigid-body simulation (prevents clipping)
+    if (this.#helper) this.#helper.update(dt);
 
     // Code-driven idle animations
     if (this.#mesh) this.#applyIdle(dt);
@@ -243,13 +286,10 @@ export class PMXModelRenderer extends ModelRenderer {
    * Tap feedback — quick scale bounce.
    */
   playMotion(_region) {
-    // Subtle acknowledgement — brief position bob instead of scale jump
-    if (!this.#mesh) return;
-    const originalY = this.#mesh.position.y;
-    this.#mesh.position.y = originalY + 0.2;
-    setTimeout(() => {
-      if (this.#mesh) this.#mesh.position.y = originalY;
-    }, 150);
+    // Trigger a smooth head nod — animated in #applyIdle over NOD_DURATION.
+    // Smooth motion doesn't shock MMDPhysics, so hair flows naturally.
+    if (!this.#headBone) return;
+    this.#nodTime = 0.001; // start the nod cycle
   }
 
   // -----------------------------------------------------------------------
@@ -294,6 +334,8 @@ export class PMXModelRenderer extends ModelRenderer {
       this.#renderer = null;
     }
 
+    this.#helper = null;
+
     this.#hideOverlay();
     if (this.#canvas?.parentNode) {
       this.#canvas.parentNode.removeChild(this.#canvas);
@@ -303,7 +345,23 @@ export class PMXModelRenderer extends ModelRenderer {
     this.#scene   = null;
     this.#camera  = null;
     this.#headBone = null;
-    this.#bodyBone = null;
+    this.#neckBone = null;
+    this.#upperBody = null;
+    this.#lowerBody = null;
+    this.#groove = null;
+    this.#lShoulder = null;
+    this.#rShoulder = null;
+    this.#lUpperArm = null;
+    this.#rUpperArm = null;
+    this.#lWrist = null;
+    this.#rWrist = null;
+    this.#lElbow = null;
+    this.#rElbow = null;
+    this.#lKnee = null;
+    this.#rKnee = null;
+    this.#lLegIK = null;
+    this.#rLegIK = null;
+    this.#fingerBones = [];
     this.#clock   = null;
     this.container = null;
     this.loaded   = false;
@@ -337,18 +395,34 @@ export class PMXModelRenderer extends ModelRenderer {
    */
   #probeRig(skeleton, morphDict) {
     if (skeleton) {
+      // -- Core / torso --
       for (const name of HEAD_BONE_NAMES) {
         const b = skeleton.getBoneByName(name);
         if (b) { this.#headBone = b; break; }
       }
+      this.#neckBone = skeleton.getBoneByName("首") || skeleton.getBoneByName("neck") || skeleton.getBoneByName("Neck");
       for (const name of BODY_BONE_NAMES) {
         const b = skeleton.getBoneByName(name);
-        if (b) { this.#bodyBone = b; break; }
+        if (b) { this.#upperBody = b; break; }
       }
-      const lUpperArm = skeleton.getBoneByName("左腕");
-      const rUpperArm = skeleton.getBoneByName("右腕");
-      if (lUpperArm) this.#lUpperArm = lUpperArm;
-      if (rUpperArm) this.#rUpperArm = rUpperArm;
+      this.#lowerBody = skeleton.getBoneByName("下半身") || skeleton.getBoneByName("lower body") || skeleton.getBoneByName("pelvis");
+      this.#groove    = skeleton.getBoneByName("センター") || skeleton.getBoneByName("groove") || skeleton.getBoneByName("中心");
+      // -- Shoulders --
+      this.#lShoulder = skeleton.getBoneByName("左肩") || skeleton.getBoneByName("左肩P") || skeleton.getBoneByName("leftShoulder");
+      this.#rShoulder = skeleton.getBoneByName("右肩") || skeleton.getBoneByName("右肩P") || skeleton.getBoneByName("rightShoulder");
+      // -- Arms --
+      this.#lUpperArm = skeleton.getBoneByName("左腕") || skeleton.getBoneByName("左上腕");
+      this.#rUpperArm = skeleton.getBoneByName("右腕") || skeleton.getBoneByName("右上腕");
+      this.#lElbow    = skeleton.getBoneByName("左ひじ") || skeleton.getBoneByName("左肘") || skeleton.getBoneByName("leftElbow");
+      this.#rElbow    = skeleton.getBoneByName("右ひじ") || skeleton.getBoneByName("右肘") || skeleton.getBoneByName("rightElbow");
+      this.#lWrist    = skeleton.getBoneByName("左手首") || skeleton.getBoneByName("左手") || skeleton.getBoneByName("leftWrist");
+      this.#rWrist    = skeleton.getBoneByName("右手首") || skeleton.getBoneByName("右手") || skeleton.getBoneByName("rightWrist");
+      // -- Legs / IK --
+      this.#lKnee     = skeleton.getBoneByName("左ひざ") || skeleton.getBoneByName("左膝") || skeleton.getBoneByName("leftKnee");
+      this.#rKnee     = skeleton.getBoneByName("右ひざ") || skeleton.getBoneByName("右膝") || skeleton.getBoneByName("rightKnee");
+      this.#lLegIK    = skeleton.getBoneByName("左足ＩＫ") || skeleton.getBoneByName("左足首ＩＫ") || skeleton.getBoneByName("leg IK L");
+      this.#rLegIK    = skeleton.getBoneByName("右足ＩＫ") || skeleton.getBoneByName("右足首ＩＫ") || skeleton.getBoneByName("leg IK R");
+      // -- Hair / chains --
       for (const name of HAIR_BONE_NAMES) {
         const b = skeleton.getBoneByName(name);
         if (b) this.#hairBones.push(b);
@@ -372,29 +446,127 @@ export class PMXModelRenderer extends ModelRenderer {
         }
       }
     }
+    // Finger curl — probe for common MMD finger bone patterns
+    this.#probeFingers(skeleton);
+  }
+
+  /**
+   * Classify a finger bone: returns { finger: 0-4, side: -1|0|1 }.
+   * finger: 0=thumb 1=index 2=middle 3=ring 4=pinky
+   * side: -1=left, 1=right, 0=unknown
+   */
+  #classifyFinger(name) {
+    const info = { finger: -1, side: 0 };
+    // Detect side
+    if (/[左lL]|Left/i.test(name))       info.side = -1;
+    else if (/[右rR]|Right/i.test(name))  info.side = 1;
+
+    // Classify finger
+    if (/[拇大]拇指|thumb/i.test(name))           info.finger = 0;
+    else if (/[食人]指|[人]指|index/i.test(name))  info.finger = 1;
+    else if (/[中中]指(?!骨)|middle/i.test(name))  info.finger = 2;
+    else if (/[无无]名指|[薬薬]指|ring/i.test(name)) info.finger = 3;
+    else if (/[小]指(?!骨)|pink/i.test(name))      info.finger = 4;
+    else if (/[指指]|finger/i.test(name))          info.finger = -1;
+
+    return info;
+  }
+
+  /** Progressive curl strength per finger (0=thumb, 4=pinky). */
+  #fingerCurl = [0.18, 0.15, 0.25, 0.38, 0.50];
+
+  /**
+   * Pose one finger bone with natural progressive curl + adduction.
+   * `side` is -1 (left) or 1 (right) — mirrors Z rotations so both hands
+   * curl inward toward their respective palms.
+   */
+  #poseFinger(bone, fingerIdx, side) {
+    const name = bone.name;
+    const isTip  = /[３3]|[先先]|tip|distal/i.test(name);
+    const isMid  = /[２2]|[中中]|mid/i.test(name);
+    const sign   = side === 0 ? 1 : side; // left=-1, right=+1
+
+    // --- Thumb: relaxed forward + inward toward palm ---
+    if (fingerIdx === 0) {
+      if (isTip) {
+        bone.rotateZ(0.25 * sign);
+      } else if (isMid) {
+        bone.rotateZ(0.20 * sign);
+        bone.rotateX(-0.10 * sign);
+      } else {
+        bone.rotateY(-0.15 * sign);
+        bone.rotateZ(0.25 * sign);
+        bone.rotateX(-0.08 * sign);
+      }
+      return;
+    }
+
+    // --- Fingers 1-4: soft 'C' curve — all three joints bend ---
+    const curl = this.#fingerCurl[fingerIdx] ?? 0.25;
+
+    // Adduction: bring toward middle finger (mirrored per side)
+    // Uses X-axis rotation — mirrored for left/right
+    let adduct = 0;
+    if (fingerIdx === 1)      adduct = -0.04;
+    else if (fingerIdx === 3) adduct =  0.04;
+    else if (fingerIdx === 4) adduct =  0.07;
+    const adductX = adduct * sign; // mirror per hand
+
+    // Primary curl via Z-axis rotation (fingers bend forward toward palm)
+    if (isTip) {
+      bone.rotateZ(curl * sign);
+      bone.rotateX(adductX * 0.5);
+    } else if (isMid) {
+      bone.rotateZ(curl * 0.65 * sign);
+      bone.rotateX(adductX);
+    } else {
+      bone.rotateZ(curl * 0.35 * sign);
+      bone.rotateX(adductX);
+    }
+  }
+
+  /** Find finger bones, classify, and pose both hands. */
+  #probeFingers(skeleton) {
+    if (!skeleton) return;
+    for (const b of skeleton.bones) {
+      const { finger, side } = this.#classifyFinger(b.name);
+      if (finger >= 0) {
+        this.#fingerBones.push({ bone: b, finger, side });
+      }
+    }
+    if (this.#fingerBones.length === 0) {
+      console.log("[PMX] No finger bones matched");
+      return;
+    }
+    for (const { bone, finger, side } of this.#fingerBones) {
+      this.#poseFinger(bone, finger, side);
+    }
+    console.log("[PMX] Fingers posed:", this.#fingerBones.length);
   }
 
   // -- idle pose & animation -------------------------------------------------
 
-  // Base pose rotations (set once, idle anim oscillates around these)
+  // Base pose — anchors that idle animations oscillate around
   #basePose = {
-    headX: 0.04, headZ: 0.02,
+    headX: 0.04, headY: 0.02, headZ: 0.01,
+    neckX: 0.06,
+    upperX: 0.04, upperY: 0, upperZ: 0,
   };
 
-  /** Set initial relaxed idle pose. Uses incremental rotation for arms. */
+  /**
+   * Natural relaxed standing pose, bone-by-bone.
+   * Torso: pelvis tilted back, spine tilted forward → neutral upright.
+   * Groove: dropped slightly for weighted stance.
+   * Shoulders: dropped + rotated forward.
+   * Arms: A-pose (15-20° out), elbows bent 5-10°, palms face inward.
+   * Legs: IK feet shoulder-width, toes slightly outward.
+   * Head: slight downward tilt, neck follows cervical curve.
+   */
   #setIdlePose() {
-    if (this.#headBone) {
-      this.#headBone.rotation.set(this.#basePose.headX, 0, this.#basePose.headZ);
-    }
-    // Rotate upper arms (腕) down from A-pose to natural hanging position
-    if (this.#lUpperArm) {
-      this.#lUpperArm.rotateZ(-0.65);
-      this.#lUpperArm.rotateX(0.08);
-    }
-    if (this.#rUpperArm) {
-      this.#rUpperArm.rotateZ(0.65);
-      this.#rUpperArm.rotateX(0.08);
-    }
+    // Arms down from A-pose to hanging (minimal — VMD for full pose)
+    if (this.#lUpperArm) this.#lUpperArm.rotateZ(-0.75);
+    if (this.#rUpperArm) this.#rUpperArm.rotateZ(0.75);
+    this.#probeFingers();
   }
 
   #applyIdle(dt) {
@@ -402,39 +574,40 @@ export class PMXModelRenderer extends ModelRenderer {
 
     this.#idleTime += dt;
 
-    // Gentle whole-body sway
-    this.#mesh.rotation.y = Math.sin(this.#idleTime * 0.35) * 0.03;
+    // Micro-sway — amplitudes tuned to avoid triggering physics vibrations
+    // while keeping the model looking alive. MMDPhysics handles cloth/hair.
+    this.#mesh.rotation.y = Math.sin(this.#idleTime * 0.25) * 0.005;
+    this.#mesh.position.y = this.#baseY + Math.sin(this.#idleTime * 0.5) * 0.008;
 
-    // Breathing bob from fixed base Y
-    this.#mesh.position.y = this.#baseY + Math.sin(this.#idleTime * 0.7) * 0.04;
-
-    // Head — oscillate around base pose
+    // Head — subtle look-around, anchored to base pose
     if (this.#headBone) {
-      this.#headBone.rotation.x = this.#basePose.headX + Math.sin(this.#idleTime * 0.45) * 0.01;
-      this.#headBone.rotation.y = Math.sin(this.#idleTime * 0.4 + 1.2) * 0.04;
-      this.#headBone.rotation.z = this.#basePose.headZ + Math.sin(this.#idleTime * 0.35 + 0.7) * 0.008;
+      this.#headBone.rotation.x = this.#basePose.headX + Math.sin(this.#idleTime * 0.35) * 0.003;
+      this.#headBone.rotation.y = this.#basePose.headY + Math.sin(this.#idleTime * 0.2 + 1.2) * 0.01;
+      this.#headBone.rotation.z = this.#basePose.headZ + Math.sin(this.#idleTime * 0.3 + 0.7) * 0.002;
     }
 
-    // Body bone — subtle breathing tilt
-    if (this.#bodyBone) {
-      this.#bodyBone.rotation.x = Math.sin(this.#idleTime * 0.8) * 0.006;
+    // Body — breathing, anchored to base pose
+    if (this.#upperBody) {
+      this.#upperBody.rotation.x = this.#basePose.upperX + Math.sin(this.#idleTime * 0.6) * 0.004;
+      this.#upperBody.rotation.y = this.#basePose.upperY + Math.sin(this.#idleTime * 0.4 + 1.5) * 0.001;
+      this.#upperBody.rotation.z = this.#basePose.upperZ + Math.sin(this.#idleTime * 0.5 + 0.8) * 0.001;
     }
 
-    // Chain physics — cape/skirt: gravity pull-down + body sway follow
-    for (let i = 0; i < this.#chainRoots.length; i++) {
-      const delay = 0.2 + i * 0.08;
-      const t = this.#idleTime - delay;
-      const sway = Math.sin(t * 0.35) * 0.005;
-      this.#chainRoots[i].rotation.set(0.25, 0, sway);
-    }
-    // Hair: lighter gravity, micro-sway
-    for (let i = 0; i < this.#hairBones.length; i++) {
-      const delay = 0.15 + i * 0.06;
-      const t = this.#idleTime - delay;
-      const sway = Math.sin(t * 0.4) * 0.003;
-      this.#hairBones[i].rotation.set(0.06, 0, sway);
+    // Smooth head nod (triggered by tap/click — playMotion)
+    if (this.#headBone && this.#nodTime > 0) {
+      this.#nodTime += dt;
+      if (this.#nodTime >= PMXModelRenderer.NOD_DURATION) {
+        // Nod complete — reset to base pose (idle will take over next frame)
+        this.#nodTime = 0;
+      } else {
+        // Sine curve: forward then back, smooth start/end
+        const t = this.#nodTime / PMXModelRenderer.NOD_DURATION;
+        const nod = Math.sin(t * Math.PI * 2) * PMXModelRenderer.NOD_ANGLE;
+        this.#headBone.rotation.x = this.#basePose.headX + nod;
+      }
     }
 
+    // Chain/hair physics handled by MMDAnimationHelper (physics: true).
     // Blink morph
     this.#updateBlink(dt);
   }

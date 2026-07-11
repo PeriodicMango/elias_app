@@ -11,12 +11,14 @@ import { Feature } from "../../core/Feature.js";
 import { GreetingBubble } from "./GreetingBubble.js";
 import { CanvasPlaceholderRenderer } from "./CanvasPlaceholderRenderer.js";
 import { PMXModelRenderer } from "./PMXModelRenderer.js?v=33";
+import { FBXModelRenderer } from "./FBXModelRenderer.js";
 import { Live2DModelRenderer } from "./Live2DModelRenderer.js";
 
 /** @param {string} type */
 function createRenderer(type) {
   switch (type) {
     case "pmx":    return new PMXModelRenderer();
+    case "fbx":    return new FBXModelRenderer();
     case "live2d": return new Live2DModelRenderer();
     default:       return new CanvasPlaceholderRenderer();
   }
@@ -62,7 +64,11 @@ export class Live2DFeature extends Feature {
     this.container = container;
     container.innerHTML = "";
     container.style.position = "relative";
+    container.style.display = "flex";
+    container.style.alignItems = "center";
+    container.style.justifyContent = "center";
     container.style.overflow = "hidden";
+    container.style.padding = "0";
 
     // Model renderer
     const type = this.config.rendererType ?? "canvas";
@@ -110,6 +116,7 @@ export class Live2DFeature extends Feature {
 
     if (this.container) {
       this.container.removeEventListener("pointerdown", this.#onPointerDown);
+      this.container.style.padding = "";
     }
 
     if (this.#renderer) {
@@ -184,10 +191,11 @@ export class Live2DFeature extends Feature {
    */
   async switchModel(rendererType, modelPath) {
     const wasMounted = this.#renderer !== null;
+    const savedContainer = this.container;
     if (wasMounted) await this.unmount();
     this.config.rendererType = rendererType;
     this.config.modelPath = modelPath;
-    if (wasMounted && this.container) await this.mount(this.container);
+    if (wasMounted && savedContainer) await this.mount(savedContainer);
   }
 
   // -----------------------------------------------------------------------

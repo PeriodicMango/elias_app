@@ -21,7 +21,7 @@ export class Live2DModelRenderer extends ModelRenderer {
     this.container = container;
 
     this.#canvas = document.createElement("canvas");
-    this.#canvas.style.cssText = "display: block; position: absolute; top: 0; left: 0;";
+    this.#canvas.style.cssText = "display: block; width: 100%; height: 100%;";
     container.appendChild(this.#canvas);
 
     this.#drawLabel();
@@ -64,8 +64,8 @@ export class Live2DModelRenderer extends ModelRenderer {
     const ctx = this.#canvas.getContext("2d");
     if (!ctx) return;
     ctx.clearRect(0, 0, this.#canvas.width, this.#canvas.height);
-    ctx.fillStyle = "var(--text-tertiary)";
-    ctx.font = "16px var(--font)";
+    ctx.fillStyle = "#888";
+    ctx.font = "16px sans-serif";
     ctx.textAlign = "center";
     ctx.fillText(this.#label, this.#canvas.width / 2, this.#canvas.height * 0.4);
   }

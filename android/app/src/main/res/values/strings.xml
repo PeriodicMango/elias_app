@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">Elias</string>
-    <string name="title_activity_main">Elias</string>
-    <string name="package_name">com.elias.companion</string>
-    <string name="custom_url_scheme">com.elias.companion</string>
-</resources>
